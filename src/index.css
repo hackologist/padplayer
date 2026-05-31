@@ -1,3 +1,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Dark background from the first paint, before React/Tailwind load.
+   Prevents a white flash (or a fully white page on slow/old devices). */
+html,
+body {
+  background-color: #020617; /* slate-950 — matches the app */
+  margin: 0;
+}

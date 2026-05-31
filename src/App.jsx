@@ -107,25 +107,27 @@ export default function App() {
 
   useEffect(() => { playingRef.current = playing; }, [playing]);
 
-  useEffect(() => {
-    const id = "hero-font";
-    if (document.getElementById(id)) return;
-    const link = document.createElement("link");
-    link.id = id;
-    link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=Anton&display=swap";
-    document.head.appendChild(link);
-  }, []);
+  // Anton headline font is now self-hosted (see index.css @font-face),
+  // so there's no Google Fonts CDN request on load.
 
   // Gumroad overlay — checkout pops up over the page, no redirect.
+  // Loaded lazily on the visitor's first interaction so it never blocks
+  // initial load or trips Safari's tracking-protection stall.
   useEffect(() => {
     const id = "gumroad-overlay";
-    if (document.getElementById(id)) return;
-    const s = document.createElement("script");
-    s.id = id;
-    s.src = "https://gumroad.com/js/gumroad.js";
-    s.async = true;
-    document.body.appendChild(s);
+    const events = ["pointerdown", "keydown", "touchstart", "scroll"];
+    const remove = () => events.forEach((e) => window.removeEventListener(e, load));
+    function load() {
+      remove();
+      if (document.getElementById(id)) return;
+      const s = document.createElement("script");
+      s.id = id;
+      s.src = "https://gumroad.com/js/gumroad.js";
+      s.async = true;
+      document.body.appendChild(s);
+    }
+    events.forEach((e) => window.addEventListener(e, load, { once: true, passive: true }));
+    return remove;
   }, []);
 
   useEffect(() => {

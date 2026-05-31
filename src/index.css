@@ -2,6 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Self-hosted Anton font (first-party, no Google Fonts CDN / tracker).
+   font-display: swap shows a fallback instantly, then swaps in Anton. */
+@font-face {
+  font-family: "Anton";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/anton-latin.woff2") format("woff2");
+}
+
 /* Dark background from the first paint, before React/Tailwind load.
    Prevents a white flash (or a fully white page on slow/old devices). */
 html,

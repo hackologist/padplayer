@@ -283,7 +283,12 @@ export default function App() {
           >
             Online Worship Pad Player
           </h1>
-          <p className="mt-4 text-xs tracking-[0.3em] uppercase text-indigo-300/70">By Kairo Audio</p>
+          <p className="mt-4 text-xs tracking-[0.3em] uppercase text-indigo-300/70">
+            By{" "}
+            <a href={KAIRO_URL} target="_blank" rel="noreferrer" className="hover:text-indigo-200 transition-colors underline-offset-4 hover:underline">
+              Kairo Audio
+            </a>
+          </p>
         </header>
 
         {/* Player */}

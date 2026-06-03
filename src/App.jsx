@@ -196,62 +196,6 @@ export default function App() {
     }
   }
 
-  // Move the active key up/down the list (used by headphone/lock-screen skip).
-  function shiftKey(delta) {
-    const i = KEYS.indexOf(activeKey);
-    setActiveKey(KEYS[(i + delta + KEYS.length) % KEYS.length]);
-  }
-
-  // ── Keep the screen awake while a pad is playing ──────────────────
-  // Worship leaders run this on a phone/tablet during a set; without this
-  // the device sleeps and the music can stop. The OS drops the lock when the
-  // tab is hidden, so we re-acquire when the page becomes visible again.
-  useEffect(() => {
-    if (!("wakeLock" in navigator)) return;
-    let sentinel = null;
-    let cancelled = false;
-    const acquire = async () => {
-      try {
-        sentinel = await navigator.wakeLock.request("screen");
-        if (cancelled) release();
-      } catch { /* ignore (denied / low battery) */ }
-    };
-    const release = () => {
-      try { sentinel && sentinel.release(); } catch { /* ignore */ }
-      sentinel = null;
-    };
-    const onVisible = () => {
-      if (!cancelled && playing && document.visibilityState === "visible" && !sentinel) acquire();
-    };
-    if (playing) acquire();
-    document.addEventListener("visibilitychange", onVisible);
-    return () => { cancelled = true; release(); document.removeEventListener("visibilitychange", onVisible); };
-  }, [playing]);
-
-  // ── Lock-screen / headphone / Bluetooth controls + "now playing" ──
-  // Shows "Signature — Key of C" on the lock screen, with play/pause and
-  // skip (skip = change key) from headphones, the lock screen, or a car.
-  useEffect(() => {
-    if (!("mediaSession" in navigator)) return;
-    const ms = navigator.mediaSession;
-    try {
-      ms.metadata = new MediaMetadata({
-        title: `${selectedTexture.name} — Key of ${activeKey}`,
-        artist: "Kairo Audio",
-        album: "Online Worship Pad Player",
-        artwork: [{ src: "/og-image.jpg", sizes: "512x512", type: "image/jpeg" }],
-      });
-      ms.playbackState = playing ? "playing" : "paused";
-    } catch { /* ignore */ }
-    const set = (action, fn) => { try { ms.setActionHandler(action, fn); } catch { /* ignore */ } };
-    set("play", () => { if (currentUrl) { engine.resume(); engine.play(currentUrl); setPlaying(true); } });
-    set("pause", () => { engine.stop(); setPlaying(false); });
-    set("previoustrack", () => shiftKey(-1));
-    set("nexttrack", () => shiftKey(1));
-    return () => ["play", "pause", "previoustrack", "nexttrack"].forEach((a) => set(a, null));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [engine, selectedTexture, activeKey, playing, currentUrl]);
-
   function selectTexture(t) {
     if (!isUnlocked(t)) { openModal(t); return; }
     setSelectedId(t.id);

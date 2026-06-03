@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
-import { Play, Pause, Volume2, Coffee, Heart, Lock, Check, Mail, X } from "lucide-react";
+import { Play, Pause, Volume2, Coffee, Heart, Lock, Check, Mail, X, Sun } from "lucide-react";
+import { createAudioEngine } from "./audioEngine";
 
 // ─────────────────────────────────────────────────────────
 // CONFIG
@@ -12,6 +13,15 @@ const KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const PREVIEW_SECONDS = 2;
 
 const emptyKeyMap = () => KEYS.reduce((acc, k) => ((acc[k] = ""), acc), {});
+
+// Build the 12 per-key URLs for a free pad hosted in /public/pads/<folder>/.
+// "#" breaks URLs, so C# is stored on disk as "Csharp.mp3", etc.
+//   padUrls("signature") -> { C: "/pads/signature/C.mp3", "C#": "/pads/signature/Csharp.mp3", ... }
+const padUrls = (folder) =>
+  KEYS.reduce((acc, k) => {
+    acc[k] = `/pads/${folder}/${k.replace("#", "sharp")}.mp3`;
+    return acc;
+  }, {});
 
 // Safe localStorage (wrapped so it can't crash; works once deployed).
 const safeGet = (k) => { try { return window.localStorage.getItem(k); } catch { return null; } };
@@ -28,7 +38,9 @@ const TEXTURES = [
     name: "Signature",
     desc: "The classic Kairo pad",
     free: true,
-    urls: { ...emptyKeyMap() }, // <- drop your 12 free files here
+    // 12 seamless-loop files live in /public/pads/signature/ (C.mp3 … B.mp3,
+    // sharps as Csharp.mp3). Drop them in and every key plays — no other change.
+    urls: padUrls("signature"),
   },
   {
     id: "ambient",
@@ -91,6 +103,7 @@ export default function App() {
   const [activeKey, setActiveKey] = useState("C");
   const [playing, setPlaying] = useState(false);
   const [volume, setVolume] = useState(0.8);
+  const [tone, setTone] = useState(0); // -1 dark .. 0 flat .. 1 bright
   const [previewing, setPreviewing] = useState(null);
 
   const [unlocked, setUnlocked] = useState({}); // { textureId: { C: url, ... } }
@@ -100,8 +113,9 @@ export default function App() {
   const [error, setError] = useState("");
   const [restoring, setRestoring] = useState(false);
 
-  const audioRef = useRef(null);
-  const previewRef = useRef(null);
+  // One Web Audio engine for the whole app (created once, lazily).
+  const [engine] = useState(createAudioEngine);
+
   const previewTimer = useRef(null);
   const playingRef = useRef(false);
 
@@ -130,9 +144,8 @@ export default function App() {
     return remove;
   }, []);
 
-  useEffect(() => {
-    if (audioRef.current) audioRef.current.volume = volume;
-  }, [volume]);
+  useEffect(() => { engine.setVolume(volume); }, [engine, volume]);
+  useEffect(() => { engine.setTone(tone); }, [engine, tone]);
 
   // On load: if we remembered the buyer's email, silently restore their
   // pads (re-verifies to fetch fresh signed URLs — no typing needed).
@@ -162,40 +175,23 @@ export default function App() {
   const currentUrl = urlFor(selectedTexture, activeKey);
   const hasAudio = !!currentUrl;
 
-  function fadeTo(audio, target, ms, done) {
-    const steps = 24;
-    const stepTime = ms / steps;
-    const start = audio.volume;
-    const delta = (target - start) / steps;
-    let i = 0;
-    const t = setInterval(() => {
-      i++;
-      audio.volume = Math.min(1, Math.max(0, start + delta * i));
-      if (i >= steps) { clearInterval(t); done && done(); }
-    }, stepTime);
-  }
-
+  // When the pad or key changes mid-play, crossfade to it (no gap).
   useEffect(() => {
-    const a = audioRef.current;
-    if (!a || !playingRef.current) return;
+    if (!playingRef.current) return;
     const url = urlFor(selectedTexture, activeKey);
-    if (!url) { fadeTo(a, 0, 400, () => a.pause()); setPlaying(false); return; }
-    fadeTo(a, 0, 450, () => {
-      a.src = url; a.loop = true; a.currentTime = 0; a.volume = 0;
-      a.play().then(() => fadeTo(a, volume, 650)).catch(() => {});
-    });
+    if (!url) { engine.stop(); setPlaying(false); return; }
+    engine.play(url);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, activeKey]);
 
   function togglePlay() {
-    const a = audioRef.current;
-    if (!a || !currentUrl) return;
+    if (!currentUrl) return;
+    engine.resume(); // unlock audio on this tap (mobile autoplay rules)
     if (playing) {
-      fadeTo(a, 0, 400, () => a.pause());
+      engine.stop();
       setPlaying(false);
     } else {
-      a.src = currentUrl; a.loop = true; a.volume = 0;
-      a.play().then(() => fadeTo(a, volume, 650)).catch(() => {});
+      engine.play(currentUrl);
       setPlaying(true);
     }
   }
@@ -206,20 +202,19 @@ export default function App() {
   }
 
   function togglePreview(pad) {
-    const p = previewRef.current;
-    if (!p) return;
     clearTimeout(previewTimer.current);
-    if (previewing === pad.id) { fadeTo(p, 0, 250, () => p.pause()); setPreviewing(null); return; }
+    if (previewing === pad.id) { engine.stopPreview(); setPreviewing(null); return; }
+    engine.resume();
     if (!pad.previewUrl) {
+      // No preview clip yet — just show the "previewing" state for 2s.
       setPreviewing(pad.id);
       previewTimer.current = setTimeout(() => setPreviewing(null), PREVIEW_SECONDS * 1000);
       return;
     }
-    p.src = pad.previewUrl; p.currentTime = 0; p.volume = 0;
-    p.play().then(() => fadeTo(p, volume, 300)).catch(() => {});
+    engine.playPreview(pad.previewUrl);
     setPreviewing(pad.id);
     previewTimer.current = setTimeout(() => {
-      fadeTo(p, 0, 300, () => p.pause());
+      engine.stopPreview();
       setPreviewing(null);
     }, PREVIEW_SECONDS * 1000);
   }
@@ -257,9 +252,6 @@ export default function App() {
       <div className="pointer-events-none absolute -top-40 -left-40 w-[40rem] h-[40rem] rounded-full bg-indigo-600/20 blur-[120px]" />
       <div className="pointer-events-none absolute top-1/3 -right-40 w-[36rem] h-[36rem] rounded-full bg-violet-700/20 blur-[120px]" />
       <div className="pointer-events-none absolute bottom-0 left-1/4 w-[36rem] h-[36rem] rounded-full bg-sky-700/10 blur-[120px]" />
-
-      <audio ref={audioRef} />
-      <audio ref={previewRef} />
 
       <div className="relative max-w-3xl mx-auto px-6 py-12 sm:py-16">
         <header className="text-center mb-12">
@@ -320,10 +312,26 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 max-w-sm mx-auto">
-            <Volume2 className="w-5 h-5 text-slate-400 shrink-0" />
-            <input type="range" min="0" max="1" step="0.01" value={volume}
-              onChange={(e) => setVolume(parseFloat(e.target.value))} className="w-full accent-indigo-500" />
+          <div className="space-y-4 max-w-sm mx-auto">
+            <div className="flex items-center gap-3">
+              <Volume2 className="w-5 h-5 text-slate-400 shrink-0" aria-label="Volume" />
+              <input type="range" min="0" max="1" step="0.01" value={volume}
+                onChange={(e) => setVolume(parseFloat(e.target.value))}
+                className="w-full accent-indigo-500" aria-label="Volume" />
+            </div>
+            <div>
+              <div className="flex items-center gap-3">
+                <Sun className="w-5 h-5 text-slate-400 shrink-0" aria-label="Tone" />
+                <input type="range" min="-1" max="1" step="0.02" value={tone}
+                  onChange={(e) => setTone(parseFloat(e.target.value))}
+                  className="w-full accent-indigo-500" aria-label="Tone, darker to brighter" />
+              </div>
+              <div className="flex justify-between pl-8 mt-1 text-[10px] uppercase tracking-widest text-slate-500">
+                <span>Darker</span>
+                <button onClick={() => setTone(0)} className="hover:text-slate-300 transition-colors" aria-label="Reset tone to flat">Flat</button>
+                <span>Brighter</span>
+              </div>
+            </div>
           </div>
         </section>
 

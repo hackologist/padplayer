@@ -21,9 +21,14 @@ const VOL_RAMP_MS = 120;  // smoothing so the volume slider doesn't zipper
 const TONE_RAMP_MS = 120;
 
 // Tone maps a -1..1 knob to a high-shelf gain in dB.
+// The whole range is shifted DARK: the default (knob centered, a=0) already
+// has a -12 dB shelf cut baked in, "Darker" goes much further down, and
+// "Brighter" only lifts partway back — it can never reach the unfiltered
+// original (a=+1 tops out at -12 + 9 = -3 dB, still cut).
 const TONE_FREQ = 3200;   // shelf corner; above this = "air"/brightness
-const TONE_MAX_DB = 9;    // +9 dB brightest
-const TONE_MIN_DB = -12;  // -12 dB darkest (cuts more than it boosts = musical)
+const TONE_BASE_DB = -12; // default cut at a=0 (today's "darkest" is the new normal)
+const TONE_UP_DB = 9;     // how far "Brighter" lifts above the default (never to 0)
+const TONE_DOWN_DB = 12;  // how far "Darker" cuts below the default
 
 const AC =
   typeof window !== "undefined"
@@ -87,9 +92,9 @@ export function createAudioEngine() {
 
   function toneToDb(amt) {
     const a = Math.max(-1, Math.min(1, amt));
-    // a>0 brightens (boost), a<0 darkens (cut). |TONE_MIN_DB| is bigger so
-    // "dark" cuts more than "bright" boosts — sounds more natural.
-    return a >= 0 ? a * TONE_MAX_DB : a * -TONE_MIN_DB;
+    // Everything sits below the default cut. a=0 → -12, a=1 → -3 (never 0),
+    // a=-1 → -24 (much darker).
+    return TONE_BASE_DB + (a >= 0 ? a * TONE_UP_DB : a * TONE_DOWN_DB);
   }
 
   // Smoothly move an AudioParam to `to` over `ms`, interrupting any

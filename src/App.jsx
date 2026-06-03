@@ -328,7 +328,7 @@ export default function App() {
               </div>
               <div className="flex justify-between pl-8 mt-1 text-[10px] uppercase tracking-widest text-slate-500">
                 <span>Darker</span>
-                <button onClick={() => setTone(0)} className="hover:text-slate-300 transition-colors" aria-label="Reset tone to flat">Flat</button>
+                <button onClick={() => setTone(0)} className="hover:text-slate-300 transition-colors" aria-label="Reset tone to default">Default</button>
                 <span>Brighter</span>
               </div>
             </div>

@@ -19,7 +19,7 @@ const emptyKeyMap = () => KEYS.reduce((acc, k) => ((acc[k] = ""), acc), {});
 //   padUrls("signature") -> { C: "/pads/signature/C.mp3", "C#": "/pads/signature/Csharp.mp3", ... }
 const padUrls = (folder) =>
   KEYS.reduce((acc, k) => {
-    acc[k] = `/pads/${folder}/${k.replace("#", "sharp")}.mp3`;
+    acc[k] = `/pads/${folder}/${k.replace("#", "sharp")}.m4a`;
     return acc;
   }, {});
 

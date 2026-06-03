@@ -25,3 +25,9 @@ dist-ssr
 
 # Claude Code personal settings (machine-specific)
 .claude/settings.local.json
+
+# Source pad audio: huge raw masters live locally only. The web player
+# serves the converted .m4a files (committed); the .wav/.asd never go to git
+# (GitHub rejects files >100MB).
+*.wav
+*.wav.asd

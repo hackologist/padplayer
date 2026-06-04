@@ -125,32 +125,12 @@ async function verifyLicense({ email }) {
 // from this single source so the two can never drift.
 const FAQS = [
   {
-    q: "What is a worship pad?",
-    a: "A worship pad is a sustained, ambient sound — usually a slow synth or string texture held on a single key — that plays underneath worship music. It fills empty space, smooths the gaps between songs, and creates an atmosphere for prayer and response without drawing attention to itself.",
-  },
-  {
-    q: "What is a drone pad?",
-    a: "A drone pad holds a single root note (a 'drone') in a chosen key. It's the simplest kind of worship pad — perfect for spontaneous worship, scripture reading, prayer, and any moment where you want an open, uncluttered foundation the band can play freely over.",
-  },
-  {
-    q: "How do I use worship pads in a service?",
-    a: "Start a pad in the key of your first song and leave it running underneath the band. Hold it through transitions so there's never silence between songs, change keys when you change songs, and bring it up on its own during prayer, communion, or an altar moment. Keep the volume low so it supports the band rather than competing with it.",
-  },
-  {
-    q: "What key should the pad be in?",
-    a: "Match the pad to the key of the song you're playing, and change keys whenever you move to a new song — tapping a new key crossfades smoothly. For spontaneous moments, pick a key that's comfortable for your singers and let the pad hold while the band improvises over the top.",
-  },
-  {
     q: "Is this worship pad player free?",
     a: "Yes — the Online Worship Pad Player is free to use in all 12 keys, with no download and no sign-up. Additional premium pad textures from Kairo Audio are available to unlock if you want more variety.",
   },
   {
     q: "Do I need to download anything or create an account?",
     a: "No. It runs entirely in your web browser on any phone, tablet, or computer. There's nothing to install and no account required — just open the page and press play.",
-  },
-  {
-    q: "Can I use it on my phone during a worship service?",
-    a: "Yes — it's built for live use on a phone or tablet. Turn on Stage Mode for a large, easy-to-read key display, and the screen stays awake while a pad is playing so your device won't sleep mid-set. Plug into your sound system or run it through your in-ear monitors.",
   },
   {
     q: "Will the pad keep playing if my screen locks?",
@@ -735,7 +715,7 @@ export default function App() {
             <div>
               <h3 className="text-base font-medium text-slate-200 mb-2">Playing pads live from your phone or iPad</h3>
               <p className="text-sm leading-relaxed text-slate-400">
-                This online drone pad player is built for the stage. Open it on a phone, iPad, or
+                Open it on a phone, iPad, or
                 laptop, plug into your sound system or in-ear monitors, and press play — no MainStage,
                 Ableton, or downloads needed. Turn on Stage Mode for a big, glanceable key you can
                 read from across the platform, and the screen stays awake while a pad plays so your

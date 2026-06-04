@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Play, Pause, Volume2, Coffee, Heart, Lock, Check, Mail, X, Sun, Maximize2, Minimize2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Play, Pause, Volume2, Coffee, Heart, Lock, Check, Mail, X, Sun, Maximize2, Minimize2 } from "lucide-react";
 import { createAudioEngine } from "./audioEngine";
 import { initAnalytics, track } from "./analytics";
 
@@ -228,6 +228,15 @@ export default function App() {
     safeSet(PREFS_KEY, JSON.stringify({ key: activeKey, volume, tone }));
   }, [activeKey, volume, tone]);
 
+  // Step the active key up/down (keyboard arrows in Stage Mode). Functional
+  // update so it's always correct regardless of closure.
+  function shiftKey(delta) {
+    setActiveKey((cur) => {
+      const i = KEYS.indexOf(cur);
+      return KEYS[(i + delta + KEYS.length) % KEYS.length];
+    });
+  }
+
   // Keep the screen awake in Stage Mode while playing — so a phone/tablet on a
   // stand never sleeps mid-set. Scoped to stage mode so it only runs live.
   useEffect(() => {
@@ -244,10 +253,14 @@ export default function App() {
     return () => { cancelled = true; release(); document.removeEventListener("visibilitychange", onVisible); };
   }, [stageMode, playing]);
 
-  // Esc exits Stage Mode.
+  // Stage Mode keyboard: Esc exits, ←/→ step the key (desktop convenience).
   useEffect(() => {
     if (!stageMode) return;
-    const onKey = (e) => { if (e.key === "Escape") setStageMode(false); };
+    const onKey = (e) => {
+      if (e.key === "Escape") setStageMode(false);
+      else if (e.key === "ArrowLeft") shiftKey(-1);
+      else if (e.key === "ArrowRight") shiftKey(1);
+    };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [stageMode]);
@@ -317,6 +330,7 @@ export default function App() {
 
   const selectedTexture = TEXTURES.find((t) => t.id === selectedId);
   const isUnlocked = (t) => t.free || !!unlocked[t.id];
+  const availableTextures = TEXTURES.filter((t) => isUnlocked(t)); // free + owned
 
   function urlFor(texture, key) {
     if (texture.free) return texture.urls[key];
@@ -351,12 +365,6 @@ export default function App() {
       setPlaying(true);
       track("pad_play", { pad: selectedTexture.name, key: activeKey, free: !!selectedTexture.free });
     }
-  }
-
-  // Step the active key up/down (used by Stage Mode's prev/next buttons).
-  function shiftKey(delta) {
-    const i = KEYS.indexOf(activeKey);
-    setActiveKey(KEYS[(i + delta + KEYS.length) % KEYS.length]);
   }
 
   // Lock-screen / headphone "now playing" + transport. Only play/pause are
@@ -712,46 +720,70 @@ export default function App() {
         </footer>
       </div>
 
-      {/* Stage Mode — fullscreen, oversized key, readable across a stage.
+      {/* Stage Mode — fullscreen, big glanceable key, direct key + pad selection.
           The screen stays awake while playing (see wake-lock effect above). */}
       {stageMode && (
-        <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col items-center justify-center px-4 py-6 select-none overflow-hidden">
+        <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col select-none overflow-hidden">
           <div className={`pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[70vmin] h-[70vmin] rounded-full bg-indigo-600/25 blur-[110px] transition-opacity duration-1000 ${playing ? "opacity-100 animate-pulse" : "opacity-40"}`} />
 
           <button onClick={() => setStageMode(false)}
-            className="absolute top-5 right-5 z-10 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors"
+            className="absolute top-4 right-4 z-10 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors"
             aria-label="Exit stage mode">
             <Minimize2 className="w-5 h-5" /> Exit
           </button>
 
-          <p className="relative text-xs sm:text-sm uppercase tracking-[0.3em] text-indigo-300/70 mb-1">{selectedTexture.name}</p>
-
-          <div className="relative flex items-center justify-center gap-3 sm:gap-8 w-full">
-            <button onClick={() => shiftKey(-1)} className="shrink-0 p-2 text-slate-500 hover:text-white transition-colors" aria-label="Previous key">
-              <ChevronLeft className="w-9 h-9 sm:w-14 sm:h-14" />
-            </button>
-            <span className="font-bold leading-none tabular-nums" style={{ fontFamily: "'Anton', Impact, sans-serif", fontSize: "clamp(7rem, 34vw, 20rem)" }}>
-              {activeKey}
-            </span>
-            <button onClick={() => shiftKey(1)} className="shrink-0 p-2 text-slate-500 hover:text-white transition-colors" aria-label="Next key">
-              <ChevronRight className="w-9 h-9 sm:w-14 sm:h-14" />
-            </button>
+          {/* Pad / drone-sound switcher — a chip per owned pad. Appears as soon
+              as you own more than the free pad; tapping switches the drone, your
+              key stays the same (it crossfades if playing). */}
+          <div className="relative pt-6 px-4 shrink-0">
+            {availableTextures.length > 1 ? (
+              <div className="flex flex-wrap justify-center gap-2 max-w-xl mx-auto">
+                {availableTextures.map((t) => (
+                  <button key={t.id} onClick={() => setSelectedId(t.id)}
+                    className={`px-4 py-1.5 rounded-full text-xs uppercase tracking-widest transition-all ${selectedId === t.id ? "bg-white/15 text-white" : "bg-white/5 text-slate-400 hover:bg-white/10"}`}>
+                    {t.name}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-xs sm:text-sm uppercase tracking-[0.3em] text-indigo-300/70">{selectedTexture.name}</p>
+            )}
           </div>
 
-          <p className="relative mt-1 text-[11px] uppercase tracking-widest text-slate-500">{playing ? "Playing" : "Paused"}</p>
-
-          <button onClick={togglePlay} disabled={!hasAudio} className="relative mt-8 group" aria-label={playing ? "Pause" : "Play"}>
-            <span className={`absolute inset-0 rounded-full bg-indigo-500/30 blur-xl transition-all duration-1000 ${playing ? "scale-150 opacity-100 animate-pulse" : "opacity-40"}`} />
-            <span className="relative flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-900/50 group-active:scale-95 transition-transform disabled:opacity-40">
-              {playing ? <Pause className="w-8 h-8" fill="white" /> : <Play className="w-8 h-8 ml-1" fill="white" />}
+          {/* Big glanceable key */}
+          <div className="relative flex-1 flex flex-col items-center justify-center min-h-0 px-4">
+            <span className="font-bold leading-none" style={{ fontFamily: "'Anton', Impact, sans-serif", fontSize: "clamp(6rem, 30vw, 16rem)" }}>
+              {activeKey}
             </span>
-          </button>
+            <p className="mt-1 text-[11px] uppercase tracking-widest text-slate-500">{playing ? "Playing" : "Paused"}</p>
+          </div>
 
-          <div className="relative mt-8 w-full max-w-xs flex items-center gap-3">
-            <Volume2 className="w-5 h-5 text-slate-500 shrink-0" aria-label="Volume" />
-            <input type="range" min="0" max="1" step="0.01" value={volume}
-              onChange={(e) => setVolume(parseFloat(e.target.value))}
-              className="w-full accent-indigo-500" aria-label="Volume" />
+          {/* Play + volume */}
+          <div className="relative shrink-0 flex flex-col items-center gap-5 px-4">
+            <button onClick={togglePlay} disabled={!hasAudio} className="relative group" aria-label={playing ? "Pause" : "Play"}>
+              <span className={`absolute inset-0 rounded-full bg-indigo-500/30 blur-xl transition-all duration-1000 ${playing ? "scale-150 opacity-100 animate-pulse" : "opacity-40"}`} />
+              <span className="relative flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-900/50 group-active:scale-95 transition-transform disabled:opacity-40">
+                {playing ? <Pause className="w-8 h-8" fill="white" /> : <Play className="w-8 h-8 ml-1" fill="white" />}
+              </span>
+            </button>
+            <div className="w-full max-w-xs flex items-center gap-3">
+              <Volume2 className="w-5 h-5 text-slate-500 shrink-0" aria-label="Volume" />
+              <input type="range" min="0" max="1" step="0.01" value={volume}
+                onChange={(e) => setVolume(parseFloat(e.target.value))}
+                className="w-full accent-indigo-500" aria-label="Volume" />
+            </div>
+          </div>
+
+          {/* Direct key selection — tap any key, no clicking through arrows */}
+          <div className="relative shrink-0 w-full max-w-md mx-auto px-4 pt-6 pb-8">
+            <div className="grid grid-cols-6 gap-2">
+              {KEYS.map((k) => (
+                <button key={k} onClick={() => setActiveKey(k)}
+                  className={`py-3 rounded-xl text-base font-semibold transition-all ${activeKey === k ? "bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-900/40" : "bg-white/10 text-slate-200 hover:bg-white/20"}`}>
+                  {k}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}

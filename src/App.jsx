@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Play, Pause, Volume2, Coffee, Heart, Lock, Check, Mail, X, Sun, Maximize2, Minimize2 } from "lucide-react";
+import { Play, Pause, Volume2, Coffee, Heart, Lock, Check, Mail, X, Maximize2, Minimize2 } from "lucide-react";
 import { createAudioEngine } from "./audioEngine";
 import { initAnalytics, track } from "./analytics";
 
@@ -13,7 +13,7 @@ const COFFEE_URL = "#"; // <- your Ko-fi / Stripe / BuyMeACoffee link
 // build/test them. Flag is injected at build time (see vite.config.js).
 const COMING_SOON = __COMING_SOON__;
 const STORAGE_KEY = "kairo_buyer_email";
-const PREFS_KEY = "pp_prefs"; // remembers last key / volume / tone across visits
+const PREFS_KEY = "pp_prefs"; // remembers last key / volume across visits
 
 const KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const PREVIEW_SECONDS = 2;
@@ -34,7 +34,7 @@ const safeGet = (k) => { try { return window.localStorage.getItem(k); } catch { 
 const safeSet = (k, v) => { try { window.localStorage.setItem(k, v); } catch { /* ignore */ } };
 const safeDel = (k) => { try { window.localStorage.removeItem(k); } catch { /* ignore */ } };
 
-// Remembered player settings (key / volume / tone). Read once at startup and
+// Remembered player settings (key / volume). Read once at startup and
 // validated so a corrupt or out-of-range value can never break playback.
 const loadPrefs = () => {
   try {
@@ -42,10 +42,9 @@ const loadPrefs = () => {
     return {
       key: KEYS.includes(p.key) ? p.key : "C",
       volume: typeof p.volume === "number" && p.volume >= 0 && p.volume <= 1 ? p.volume : 0.8,
-      tone: typeof p.tone === "number" && p.tone >= -1 && p.tone <= 1 ? p.tone : 0,
     };
   } catch {
-    return { key: "C", volume: 0.8, tone: 0 };
+    return { key: "C", volume: 0.8 };
   }
 };
 
@@ -137,10 +136,6 @@ const FAQS = [
     a: "On most devices it keeps going, and when you return to the player it picks up right where it left off, with no refresh needed. For completely uninterrupted playback during a service, use Stage Mode, which keeps the screen awake so the device never sleeps.",
   },
   {
-    q: "Can I make the pad brighter or darker?",
-    a: "Yes. Use the tone control to shape the sound: slide toward 'Darker' for a warmer pad that sits gently under the band, or toward 'Brighter' to let it shimmer and open up. Your key, volume, and tone are remembered for your next visit.",
-  },
-  {
     q: "What's the difference between the free pad and the paid pads?",
     a: "The free pad covers all 12 keys and suits most worship moments. The premium pads from Kairo Audio add different textures and moods (ambient, cinematic, warm analog) for when you want a specific atmosphere.",
   },
@@ -162,7 +157,6 @@ export default function App() {
   const [activeKey, setActiveKey] = useState(prefs.key);
   const [playing, setPlaying] = useState(false);
   const [volume, setVolume] = useState(prefs.volume);
-  const [tone, setTone] = useState(prefs.tone); // -1 dark .. 0 flat .. 1 bright
   const [previewing, setPreviewing] = useState(null);
   const [stageMode, setStageMode] = useState(false);
 
@@ -175,8 +169,11 @@ export default function App() {
 
   // One audio engine for the whole app (created once). ?engine=plain forces a
   // bare <audio> element (no Web Audio) to test/fix the iOS transpose bug.
+  // Plain <audio> playback by default. Web Audio's MediaElementSource caused a
+  // periodic pitch transpose on iOS; the dark tone is now baked into the files.
+  // (?engine=webaudio re-enables the old Web Audio path for testing only.)
   const [engine] = useState(() => createAudioEngine({
-    plain: typeof window !== "undefined" && new URLSearchParams(window.location.search).get("engine") === "plain",
+    plain: typeof window === "undefined" || new URLSearchParams(window.location.search).get("engine") !== "webaudio",
   }));
 
   const previewTimer = useRef(null);
@@ -208,12 +205,11 @@ export default function App() {
   }, []);
 
   useEffect(() => { engine.setVolume(volume); }, [engine, volume]);
-  useEffect(() => { engine.setTone(tone); }, [engine, tone]);
 
-  // Remember the worship leader's key/volume/tone for next visit.
+  // Remember the worship leader's key + volume for next visit.
   useEffect(() => {
-    safeSet(PREFS_KEY, JSON.stringify({ key: activeKey, volume, tone }));
-  }, [activeKey, volume, tone]);
+    safeSet(PREFS_KEY, JSON.stringify({ key: activeKey, volume }));
+  }, [activeKey, volume]);
 
   // Step the active key up/down (keyboard arrows in Stage Mode). Functional
   // update so it's always correct regardless of closure.
@@ -550,19 +546,6 @@ export default function App() {
                 onChange={(e) => setVolume(parseFloat(e.target.value))}
                 className="w-full accent-indigo-500" aria-label="Volume" />
             </div>
-            <div>
-              <div className="flex items-center gap-3">
-                <Sun className="w-5 h-5 text-slate-400 shrink-0" aria-label="Tone" />
-                <input type="range" min="-1" max="1" step="0.02" value={tone}
-                  onChange={(e) => setTone(parseFloat(e.target.value))}
-                  className="w-full accent-indigo-500" aria-label="Tone, darker to brighter" />
-              </div>
-              <div className="flex justify-between pl-8 mt-1 text-[10px] uppercase tracking-widest text-slate-500">
-                <span>Darker</span>
-                <button onClick={() => setTone(0)} className="hover:text-slate-300 transition-colors" aria-label="Reset tone to default">Default</button>
-                <span>Brighter</span>
-              </div>
-            </div>
             <button
               onClick={enterStage}
               className="mt-2 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-white/5 text-sm font-medium text-slate-300 hover:bg-white/10 transition-colors"
@@ -722,8 +705,7 @@ export default function App() {
                 laptop, plug into your sound system or in-ear monitors, and press play, with no MainStage,
                 Ableton, or downloads needed. Turn on Stage Mode for a big, glanceable key you can
                 read from across the platform, and the screen stays awake while a pad plays so your
-                device never sleeps mid-set. Shape the sound brighter or darker with the tone control,
-                and your key, volume, and tone are remembered for next time.
+                device never sleeps mid-set. Your key and volume are remembered for next time.
               </p>
             </div>
           </div>
@@ -824,18 +806,12 @@ export default function App() {
                 {playing ? <Pause className="w-8 h-8" fill="white" /> : <Play className="w-8 h-8 ml-1" fill="white" />}
               </span>
             </button>
-            <div className="w-full max-w-xs space-y-3">
+            <div className="w-full max-w-xs">
               <div className="flex items-center gap-3">
                 <Volume2 className="w-5 h-5 text-slate-500 shrink-0" aria-label="Volume" />
                 <input type="range" min="0" max="1" step="0.01" value={volume}
                   onChange={(e) => setVolume(parseFloat(e.target.value))}
                   className="w-full accent-indigo-500" aria-label="Volume" />
-              </div>
-              <div className="flex items-center gap-3">
-                <Sun className="w-5 h-5 text-slate-500 shrink-0" aria-label="Tone" />
-                <input type="range" min="-1" max="1" step="0.02" value={tone}
-                  onChange={(e) => setTone(parseFloat(e.target.value))}
-                  className="w-full accent-indigo-500" aria-label="Tone, darker to brighter" />
               </div>
             </div>
           </div>

@@ -237,6 +237,37 @@ export default function App() {
     });
   }
 
+  // Native fullscreen (best-effort, vendor-prefixed). Desktop/Android hide the
+  // browser chrome entirely; iOS Safari ignores it for non-video, so there we
+  // just fall back to the full-viewport overlay.
+  function enterStage() {
+    setStageMode(true);
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    try { const r = req && req.call(el); if (r && r.catch) r.catch(() => {}); } catch { /* not allowed */ }
+  }
+  function exitStage() {
+    setStageMode(false);
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!fsEl) return;
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    try { const r = exit && exit.call(document); if (r && r.catch) r.catch(() => {}); } catch { /* ignore */ }
+  }
+
+  // Keep Stage Mode in sync if the user leaves fullscreen via Esc / browser UI.
+  useEffect(() => {
+    const onFs = () => {
+      const fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+      if (!fsEl) setStageMode(false);
+    };
+    document.addEventListener("fullscreenchange", onFs);
+    document.addEventListener("webkitfullscreenchange", onFs);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFs);
+      document.removeEventListener("webkitfullscreenchange", onFs);
+    };
+  }, []);
+
   // Keep the screen awake in Stage Mode while playing — so a phone/tablet on a
   // stand never sleeps mid-set. Scoped to stage mode so it only runs live.
   useEffect(() => {
@@ -257,7 +288,7 @@ export default function App() {
   useEffect(() => {
     if (!stageMode) return;
     const onKey = (e) => {
-      if (e.key === "Escape") setStageMode(false);
+      if (e.key === "Escape") exitStage();
       else if (e.key === "ArrowLeft") shiftKey(-1);
       else if (e.key === "ArrowRight") shiftKey(1);
     };
@@ -533,7 +564,7 @@ export default function App() {
               </div>
             </div>
             <button
-              onClick={() => setStageMode(true)}
+              onClick={enterStage}
               className="mt-2 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-white/5 text-sm font-medium text-slate-300 hover:bg-white/10 transition-colors"
             >
               <Maximize2 className="w-4 h-4" /> Stage Mode
@@ -726,7 +757,7 @@ export default function App() {
         <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col select-none overflow-hidden">
           <div className={`pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[70vmin] h-[70vmin] rounded-full bg-indigo-600/25 blur-[110px] transition-opacity duration-1000 ${playing ? "opacity-100 animate-pulse" : "opacity-40"}`} />
 
-          <button onClick={() => setStageMode(false)}
+          <button onClick={exitStage}
             className="absolute top-4 right-4 z-10 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors"
             aria-label="Exit stage mode">
             <Minimize2 className="w-5 h-5" /> Exit
@@ -766,11 +797,19 @@ export default function App() {
                 {playing ? <Pause className="w-8 h-8" fill="white" /> : <Play className="w-8 h-8 ml-1" fill="white" />}
               </span>
             </button>
-            <div className="w-full max-w-xs flex items-center gap-3">
-              <Volume2 className="w-5 h-5 text-slate-500 shrink-0" aria-label="Volume" />
-              <input type="range" min="0" max="1" step="0.01" value={volume}
-                onChange={(e) => setVolume(parseFloat(e.target.value))}
-                className="w-full accent-indigo-500" aria-label="Volume" />
+            <div className="w-full max-w-xs space-y-3">
+              <div className="flex items-center gap-3">
+                <Volume2 className="w-5 h-5 text-slate-500 shrink-0" aria-label="Volume" />
+                <input type="range" min="0" max="1" step="0.01" value={volume}
+                  onChange={(e) => setVolume(parseFloat(e.target.value))}
+                  className="w-full accent-indigo-500" aria-label="Volume" />
+              </div>
+              <div className="flex items-center gap-3">
+                <Sun className="w-5 h-5 text-slate-500 shrink-0" aria-label="Tone" />
+                <input type="range" min="-1" max="1" step="0.02" value={tone}
+                  onChange={(e) => setTone(parseFloat(e.target.value))}
+                  className="w-full accent-indigo-500" aria-label="Tone, darker to brighter" />
+              </div>
             </div>
           </div>
 

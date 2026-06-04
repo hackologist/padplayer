@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Play, Pause, Volume2, Coffee, Heart, Lock, Check, Mail, X, Sun } from "lucide-react";
 import { createAudioEngine } from "./audioEngine";
+import { initAnalytics, track } from "./analytics";
 
 // ─────────────────────────────────────────────────────────
 // CONFIG
@@ -154,6 +155,32 @@ export default function App() {
     if (new URLSearchParams(window.location.search).has("debug")) window.__padEngine = engine;
   }, [engine]);
 
+  // Load PostHog when the browser is idle, so it never delays first paint.
+  useEffect(() => {
+    const start = () => initAnalytics();
+    if ("requestIdleCallback" in window) {
+      const id = window.requestIdleCallback(start, { timeout: 3000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const t = setTimeout(start, 2500);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Scroll-depth: did people reach the paid pads / tip jar? Fire 50% & 90% once.
+  useEffect(() => {
+    const hit = new Set();
+    const onScroll = () => {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      if (max <= 0) return;
+      const pct = (window.scrollY / max) * 100;
+      for (const m of [50, 90]) {
+        if (pct >= m && !hit.has(m)) { hit.add(m); track("scroll_depth", { depth: m }); }
+      }
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   // When returning to the tab (iOS may have suspended audio on screen lock),
   // resume and continue from the exact position — no restart, no refresh.
   useEffect(() => {
@@ -207,6 +234,7 @@ export default function App() {
       return;
     }
     engine.play(url);
+    track("pad_play", { pad: selectedTexture.name, key: activeKey, free: !!selectedTexture.free });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, activeKey]);
 
@@ -219,6 +247,7 @@ export default function App() {
     } else {
       engine.play(currentUrl);
       setPlaying(true);
+      track("pad_play", { pad: selectedTexture.name, key: activeKey, free: !!selectedTexture.free });
     }
   }
 
@@ -253,6 +282,7 @@ export default function App() {
     clearTimeout(previewTimer.current);
     if (previewing === pad.id) { engine.stopPreview(); setPreviewing(null); return; }
     engine.resume();
+    track("preview_play", { pad: pad.name });
     if (!pad.previewUrl) {
       // No preview clip yet — just show the "previewing" state for 2s.
       setPreviewing(pad.id);
@@ -267,7 +297,7 @@ export default function App() {
     }, PREVIEW_SECONDS * 1000);
   }
 
-  function openModal(pad) { setModalPad(pad); setError(""); }
+  function openModal(pad) { setModalPad(pad); setError(""); track("unlock_open", { pad: pad.name }); }
 
   async function handleUnlock() {
     if (!modalPad) return;
@@ -277,6 +307,7 @@ export default function App() {
       const { urls } = await verifyLicense({ textureId: modalPad.id, email });
       setUnlocked((prev) => ({ ...prev, [modalPad.id]: urls }));
       safeSet(STORAGE_KEY, email.trim()); // remember on this device
+      track("unlock_success", { pad: modalPad.name }); // the conversion
       setSelectedId(modalPad.id);
       setModalPad(null);
     } catch (e) {
@@ -445,7 +476,7 @@ export default function App() {
                     </button>
                   ) : (
                     <div className="mt-auto space-y-2">
-                      <a href={pad.buyUrl} className="gumroad-button inline-flex w-full items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-white text-slate-900 text-sm font-semibold hover:bg-slate-100 transition-colors">
+                      <a href={pad.buyUrl} onClick={() => track("buy_click", { pad: pad.name, price: pad.price })} className="gumroad-button inline-flex w-full items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-white text-slate-900 text-sm font-semibold hover:bg-slate-100 transition-colors">
                         Buy {pad.price}
                       </a>
                       <button onClick={() => openModal(pad)}
@@ -491,9 +522,11 @@ export default function App() {
             <div className="flex flex-wrap justify-center gap-3">
               {["$3", "$5", "$10"].map((amt) => (
                 <a key={amt} href={COFFEE_URL} target="_blank" rel="noreferrer"
+                  onClick={() => track("coffee_click", { amount: amt })}
                   className="px-5 py-2.5 rounded-full bg-amber-400/90 text-slate-900 text-sm font-semibold hover:bg-amber-300 transition-colors">{amt}</a>
               ))}
               <a href={COFFEE_URL} target="_blank" rel="noreferrer"
+                onClick={() => track("coffee_click", { amount: "custom" })}
                 className="px-5 py-2.5 rounded-full bg-white/10 text-sm font-medium hover:bg-white/20 transition-colors inline-flex items-center gap-1.5">
                 <Heart className="w-3.5 h-3.5" /> Custom
               </a>
@@ -522,7 +555,7 @@ export default function App() {
               className="w-full px-6 py-3 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 font-medium hover:opacity-90 transition-opacity disabled:opacity-50">
               {verifying ? "Verifying…" : "Unlock"}
             </button>
-            <a href={modalPad.buyUrl} className="gumroad-button block text-center mt-4 text-sm text-slate-400 hover:text-slate-200 transition-colors">
+            <a href={modalPad.buyUrl} onClick={() => track("buy_click", { pad: modalPad.name, price: modalPad.price })} className="gumroad-button block text-center mt-4 text-sm text-slate-400 hover:text-slate-200 transition-colors">
               Don't have it yet? Buy for {modalPad.price}
             </a>
           </div>

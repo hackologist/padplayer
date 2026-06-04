@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Play, Pause, Volume2, Coffee, Heart, Lock, Check, Mail, X, Sun } from "lucide-react";
+import { Play, Pause, Volume2, Coffee, Heart, Lock, Check, Mail, X, Sun, Maximize2, Minimize2, ChevronLeft, ChevronRight } from "lucide-react";
 import { createAudioEngine } from "./audioEngine";
 import { initAnalytics, track } from "./analytics";
 
@@ -9,6 +9,7 @@ import { initAnalytics, track } from "./analytics";
 const KAIRO_URL = "https://kairoaudio.com";
 const COFFEE_URL = "#"; // <- your Ko-fi / Stripe / BuyMeACoffee link
 const STORAGE_KEY = "kairo_buyer_email";
+const PREFS_KEY = "pp_prefs"; // remembers last key / volume / tone across visits
 
 const KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const PREVIEW_SECONDS = 2;
@@ -28,6 +29,21 @@ const padUrls = (folder) =>
 const safeGet = (k) => { try { return window.localStorage.getItem(k); } catch { return null; } };
 const safeSet = (k, v) => { try { window.localStorage.setItem(k, v); } catch { /* ignore */ } };
 const safeDel = (k) => { try { window.localStorage.removeItem(k); } catch { /* ignore */ } };
+
+// Remembered player settings (key / volume / tone). Read once at startup and
+// validated so a corrupt or out-of-range value can never break playback.
+const loadPrefs = () => {
+  try {
+    const p = JSON.parse(safeGet(PREFS_KEY) || "{}");
+    return {
+      key: KEYS.includes(p.key) ? p.key : "C",
+      volume: typeof p.volume === "number" && p.volume >= 0 && p.volume <= 1 ? p.volume : 0.8,
+      tone: typeof p.tone === "number" && p.tone >= -1 && p.tone <= 1 ? p.tone : 0,
+    };
+  } catch {
+    return { key: "C", volume: 0.8, tone: 0 };
+  }
+};
 
 // Each texture has a URL per key (12 looping files).
 // FREE: urls filled in directly, plays for everyone.
@@ -101,13 +117,70 @@ async function verifyLicense({ email }) {
   return { ok: true, urls: { ...emptyKeyMap() } };
 }
 
+// FAQ content — rendered visibly AND emitted as FAQPage structured data below,
+// from this single source so the two can never drift.
+const FAQS = [
+  {
+    q: "What is a worship pad?",
+    a: "A worship pad is a sustained, ambient sound — usually a slow synth or string texture held on a single key — that plays underneath worship music. It fills empty space, smooths the gaps between songs, and creates an atmosphere for prayer and response without drawing attention to itself.",
+  },
+  {
+    q: "What is a drone pad?",
+    a: "A drone pad holds a single root note (a 'drone') in a chosen key. It's the simplest kind of worship pad — perfect for spontaneous worship, scripture reading, prayer, and any moment where you want an open, uncluttered foundation the band can play freely over.",
+  },
+  {
+    q: "How do I use worship pads in a service?",
+    a: "Start a pad in the key of your first song and leave it running underneath the band. Hold it through transitions so there's never silence between songs, change keys when you change songs, and bring it up on its own during prayer, communion, or an altar moment. Keep the volume low so it supports the band rather than competing with it.",
+  },
+  {
+    q: "What key should the pad be in?",
+    a: "Match the pad to the key of the song you're playing, and change keys whenever you move to a new song — tapping a new key crossfades smoothly. For spontaneous moments, pick a key that's comfortable for your singers and let the pad hold while the band improvises over the top.",
+  },
+  {
+    q: "Is this worship pad player free?",
+    a: "Yes — the Online Worship Pad Player is free to use in all 12 keys, with no download and no sign-up. Additional premium pad textures from Kairo Audio are available to unlock if you want more variety.",
+  },
+  {
+    q: "Do I need to download anything or create an account?",
+    a: "No. It runs entirely in your web browser on any phone, tablet, or computer. There's nothing to install and no account required — just open the page and press play.",
+  },
+  {
+    q: "Can I use it on my phone during a worship service?",
+    a: "Yes — it's built for live use on a phone or tablet. Turn on Stage Mode for a large, easy-to-read key display, and the screen stays awake while a pad is playing so your device won't sleep mid-set. Plug into your sound system or run it through your in-ear monitors.",
+  },
+  {
+    q: "Will the pad keep playing if my screen locks?",
+    a: "On most devices it keeps going, and when you return to the player it picks up right where it left off — no refresh needed. For completely uninterrupted playback during a service, use Stage Mode, which keeps the screen awake so the device never sleeps.",
+  },
+  {
+    q: "Can I make the pad brighter or darker?",
+    a: "Yes. Use the tone control to shape the sound — slide toward 'Darker' for a warmer pad that sits gently under the band, or toward 'Brighter' to let it shimmer and open up. Your key, volume, and tone are remembered for your next visit.",
+  },
+  {
+    q: "What's the difference between the free pad and the paid pads?",
+    a: "The free pad covers all 12 keys and suits most worship moments. The premium pads from Kairo Audio add different textures and moods — ambient, cinematic, warm analog — for when you want a specific atmosphere.",
+  },
+];
+
+const FAQ_JSONLD = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: FAQS.map(({ q, a }) => ({
+    "@type": "Question",
+    name: q,
+    acceptedAnswer: { "@type": "Answer", text: a },
+  })),
+};
+
 export default function App() {
+  const [prefs] = useState(loadPrefs); // remembered settings, read once
   const [selectedId, setSelectedId] = useState("signature");
-  const [activeKey, setActiveKey] = useState("C");
+  const [activeKey, setActiveKey] = useState(prefs.key);
   const [playing, setPlaying] = useState(false);
-  const [volume, setVolume] = useState(0.8);
-  const [tone, setTone] = useState(0); // -1 dark .. 0 flat .. 1 bright
+  const [volume, setVolume] = useState(prefs.volume);
+  const [tone, setTone] = useState(prefs.tone); // -1 dark .. 0 flat .. 1 bright
   const [previewing, setPreviewing] = useState(null);
+  const [stageMode, setStageMode] = useState(false);
 
   const [unlocked, setUnlocked] = useState({}); // { textureId: { C: url, ... } }
   const [modalPad, setModalPad] = useState(null);
@@ -149,6 +222,35 @@ export default function App() {
 
   useEffect(() => { engine.setVolume(volume); }, [engine, volume]);
   useEffect(() => { engine.setTone(tone); }, [engine, tone]);
+
+  // Remember the worship leader's key/volume/tone for next visit.
+  useEffect(() => {
+    safeSet(PREFS_KEY, JSON.stringify({ key: activeKey, volume, tone }));
+  }, [activeKey, volume, tone]);
+
+  // Keep the screen awake in Stage Mode while playing — so a phone/tablet on a
+  // stand never sleeps mid-set. Scoped to stage mode so it only runs live.
+  useEffect(() => {
+    if (!stageMode || !playing || !("wakeLock" in navigator)) return;
+    let sentinel = null, cancelled = false;
+    const acquire = async () => {
+      try { sentinel = await navigator.wakeLock.request("screen"); if (cancelled) release(); }
+      catch { /* denied / low battery */ }
+    };
+    const release = () => { try { sentinel && sentinel.release(); } catch { /* ignore */ } sentinel = null; };
+    const onVisible = () => { if (!cancelled && document.visibilityState === "visible" && !sentinel) acquire(); };
+    acquire();
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { cancelled = true; release(); document.removeEventListener("visibilitychange", onVisible); };
+  }, [stageMode, playing]);
+
+  // Esc exits Stage Mode.
+  useEffect(() => {
+    if (!stageMode) return;
+    const onKey = (e) => { if (e.key === "Escape") setStageMode(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [stageMode]);
 
   // Diagnostics hook: visit ?debug to expose the engine for inspection/testing.
   useEffect(() => {
@@ -249,6 +351,12 @@ export default function App() {
       setPlaying(true);
       track("pad_play", { pad: selectedTexture.name, key: activeKey, free: !!selectedTexture.free });
     }
+  }
+
+  // Step the active key up/down (used by Stage Mode's prev/next buttons).
+  function shiftKey(delta) {
+    const i = KEYS.indexOf(activeKey);
+    setActiveKey(KEYS[(i + delta + KEYS.length) % KEYS.length]);
   }
 
   // Lock-screen / headphone "now playing" + transport. Only play/pause are
@@ -416,6 +524,12 @@ export default function App() {
                 <span>Brighter</span>
               </div>
             </div>
+            <button
+              onClick={() => setStageMode(true)}
+              className="mt-2 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-white/5 text-sm font-medium text-slate-300 hover:bg-white/10 transition-colors"
+            >
+              <Maximize2 className="w-4 h-4" /> Stage Mode
+            </button>
           </div>
         </section>
 
@@ -497,20 +611,78 @@ export default function App() {
           )}
         </section>
 
-        {/* SEO / about — real readable content for search engines */}
-        <section className="mt-14 max-w-2xl mx-auto text-center">
-          <h2 className="text-lg font-light text-slate-300 mb-3">
+        {/* SEO guide + FAQ — real, readable content for search engines and people */}
+        <section className="mt-16 max-w-2xl mx-auto">
+          <h2 className="text-2xl font-light text-slate-200 mb-4 text-center">
             A free online worship pad player, in your browser
           </h2>
-          <p className="text-sm leading-relaxed text-slate-500">
-            Play sustained worship pads and drone pads in all 12 keys, anytime.
-            This free worship pad player runs right in your browser, with no
-            download and no sign up. Use the free pad for prayer, rehearsal,
-            songwriting, or filling the space between songs, then unlock
-            different worship and drone pad textures from Kairo Audio when you
-            want more. Built for worship leaders and musicians who want an
-            online pad player and drone pads ready in a single tap.
+          <p className="text-sm leading-relaxed text-slate-400 mb-10 text-center">
+            Play sustained worship pads and ambient drone pads in all 12 keys, right from your
+            browser — no download and no sign up. Whether you lead worship solo, run a small band,
+            or just want a fuller sound, these worship textures fill the room, smooth your song
+            transitions, and hold an atmosphere for prayer and spontaneous worship. Run it from a
+            phone, tablet, or laptop on stage — no MainStage, Ableton, or extra software required.
           </p>
+
+          <div className="space-y-7 text-left">
+            <div>
+              <h3 className="text-base font-medium text-slate-200 mb-2">What are worship pads and drone pads?</h3>
+              <p className="text-sm leading-relaxed text-slate-400">
+                Worship pads — also called ambient pads or worship textures — are sustained, evolving
+                sounds that hold a single key underneath your music. A drone pad is the simplest form:
+                one root note held in a chosen key, giving the band an open foundation to play over.
+                Together they add depth and atmosphere, glue your worship set together, and fill the
+                dead air that can otherwise break the moment.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-base font-medium text-slate-200 mb-2">How to use pads in your worship set</h3>
+              <p className="text-sm leading-relaxed text-slate-400">
+                Start an ambient pad in the key of your first song and leave it running beneath the
+                band. Hold it through transitions so there's never an awkward silence between songs,
+                change keys when you change songs, and bring the pad up on its own during prayer,
+                communion, scripture reading, or spontaneous worship. Keep the level low so the
+                worship pad supports the room rather than competing with the band — especially
+                helpful for solo worship leaders and smaller teams who want a fuller sound.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-base font-medium text-slate-200 mb-2">Choosing the right key</h3>
+              <p className="text-sm leading-relaxed text-slate-400">
+                Set the pad to the key of the song you're playing, then change keys whenever you move
+                to a new song — tapping a new key crossfades smoothly so the change is seamless. For
+                open, spontaneous moments, pick a key that suits your singers and let the sustained
+                drone hold while the band improvises over the top.
+              </p>
+            </div>
+            <div>
+              <h3 className="text-base font-medium text-slate-200 mb-2">Playing pads live from your phone or iPad</h3>
+              <p className="text-sm leading-relaxed text-slate-400">
+                This online drone pad player is built for the stage. Open it on a phone, iPad, or
+                laptop, plug into your sound system or in-ear monitors, and press play — no MainStage,
+                Ableton, or downloads needed. Turn on Stage Mode for a big, glanceable key you can
+                read from across the platform, and the screen stays awake while a pad plays so your
+                device never sleeps mid-set. Shape the sound brighter or darker with the tone control,
+                and your key, volume, and tone are remembered for next time.
+              </p>
+            </div>
+          </div>
+
+          <h2 className="text-2xl font-light text-slate-200 mt-14 mb-5 text-center">Frequently asked questions</h2>
+          <div className="space-y-3">
+            {FAQS.map(({ q, a }) => (
+              <details key={q} className="group rounded-xl border border-white/10 bg-white/[0.03] px-5 py-4">
+                <summary className="cursor-pointer list-none flex items-center justify-between gap-3 text-sm font-medium text-slate-200">
+                  <span>{q}</span>
+                  <span className="shrink-0 text-lg leading-none text-slate-500 transition-transform group-open:rotate-45">+</span>
+                </summary>
+                <p className="mt-3 text-sm leading-relaxed text-slate-400">{a}</p>
+              </details>
+            ))}
+          </div>
+
+          {/* FAQPage structured data, generated from the same FAQS above */}
+          <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_JSONLD) }} />
         </section>
 
         {/* Donate */}
@@ -539,6 +711,50 @@ export default function App() {
           <a href={KAIRO_URL} target="_blank" rel="noreferrer" className="hover:text-slate-300 transition-colors">kairoaudio.com</a>
         </footer>
       </div>
+
+      {/* Stage Mode — fullscreen, oversized key, readable across a stage.
+          The screen stays awake while playing (see wake-lock effect above). */}
+      {stageMode && (
+        <div className="fixed inset-0 z-[60] bg-slate-950 flex flex-col items-center justify-center px-4 py-6 select-none overflow-hidden">
+          <div className={`pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[70vmin] h-[70vmin] rounded-full bg-indigo-600/25 blur-[110px] transition-opacity duration-1000 ${playing ? "opacity-100 animate-pulse" : "opacity-40"}`} />
+
+          <button onClick={() => setStageMode(false)}
+            className="absolute top-5 right-5 z-10 inline-flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition-colors"
+            aria-label="Exit stage mode">
+            <Minimize2 className="w-5 h-5" /> Exit
+          </button>
+
+          <p className="relative text-xs sm:text-sm uppercase tracking-[0.3em] text-indigo-300/70 mb-1">{selectedTexture.name}</p>
+
+          <div className="relative flex items-center justify-center gap-3 sm:gap-8 w-full">
+            <button onClick={() => shiftKey(-1)} className="shrink-0 p-2 text-slate-500 hover:text-white transition-colors" aria-label="Previous key">
+              <ChevronLeft className="w-9 h-9 sm:w-14 sm:h-14" />
+            </button>
+            <span className="font-bold leading-none tabular-nums" style={{ fontFamily: "'Anton', Impact, sans-serif", fontSize: "clamp(7rem, 34vw, 20rem)" }}>
+              {activeKey}
+            </span>
+            <button onClick={() => shiftKey(1)} className="shrink-0 p-2 text-slate-500 hover:text-white transition-colors" aria-label="Next key">
+              <ChevronRight className="w-9 h-9 sm:w-14 sm:h-14" />
+            </button>
+          </div>
+
+          <p className="relative mt-1 text-[11px] uppercase tracking-widest text-slate-500">{playing ? "Playing" : "Paused"}</p>
+
+          <button onClick={togglePlay} disabled={!hasAudio} className="relative mt-8 group" aria-label={playing ? "Pause" : "Play"}>
+            <span className={`absolute inset-0 rounded-full bg-indigo-500/30 blur-xl transition-all duration-1000 ${playing ? "scale-150 opacity-100 animate-pulse" : "opacity-40"}`} />
+            <span className="relative flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-900/50 group-active:scale-95 transition-transform disabled:opacity-40">
+              {playing ? <Pause className="w-8 h-8" fill="white" /> : <Play className="w-8 h-8 ml-1" fill="white" />}
+            </span>
+          </button>
+
+          <div className="relative mt-8 w-full max-w-xs flex items-center gap-3">
+            <Volume2 className="w-5 h-5 text-slate-500 shrink-0" aria-label="Volume" />
+            <input type="range" min="0" max="1" step="0.01" value={volume}
+              onChange={(e) => setVolume(parseFloat(e.target.value))}
+              className="w-full accent-indigo-500" aria-label="Volume" />
+          </div>
+        </div>
+      )}
 
       {/* Unlock modal */}
       {modalPad && (

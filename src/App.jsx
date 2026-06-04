@@ -149,13 +149,10 @@ export default function App() {
   useEffect(() => { engine.setVolume(volume); }, [engine, volume]);
   useEffect(() => { engine.setTone(tone); }, [engine, tone]);
 
-  // Hand audio to/from the background element when the screen locks or the tab
-  // is hidden, and resume cleanly on return (fixes the "needs refresh" glitch).
+  // When returning to the tab (iOS may have suspended audio on screen lock),
+  // resume and continue from the exact position — no restart, no refresh.
   useEffect(() => {
-    const onVis = () => {
-      if (document.visibilityState === "hidden") engine.onHidden();
-      else engine.onVisible();
-    };
+    const onVis = () => { if (document.visibilityState === "visible") engine.onVisible(); };
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("pageshow", onVis);
     return () => {

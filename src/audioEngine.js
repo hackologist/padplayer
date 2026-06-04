@@ -1,37 +1,32 @@
 // ─────────────────────────────────────────────────────────
 // Web Audio engine for the pad player.
 //
-// Goals (and the platform realities behind them):
+// Why Web Audio (not <audio>.volume)? iOS Safari IGNORES
+// HTMLMediaElement.volume from JS, so plain element fades do nothing on
+// iPhone. Routing every element through a GainNode + BiquadFilter gives real,
+// sample-accurate fades, a crossfade between keys, and the tone EQ on ALL
+// devices.
 //
-//  • Real fades / crossfade / tone EQ on ALL devices. iOS Safari ignores
-//    HTMLMediaElement.volume from JS, so we route every foreground element
-//    through a GainNode + BiquadFilter in an AudioContext.
+// Playback paths:
+//   • 2 routed voices (A/B) for gapless CROSSFADE when switching pad/key.
+//   • 1 routed preview voice for the short paid-pad previews.
 //
-//  • Keep playing when the screen LOCKS. iOS suspends the AudioContext when
-//    the page is backgrounded (webkit.org/show_bug.cgi?id=237878), which would
-//    stop all Web Audio. A plain <audio> element, however, keeps playing while
-//    locked. So we keep a NON-routed "background" element and hand playback to
-//    it when the page hides, then hand back to the filtered voices on return.
-//    If the handoff can't start (older iOS), we simply degrade to the previous
-//    behaviour — never worse.
-//
-//  • navigator.audioSession = "playback" tells iOS this is media playback:
-//    it ignores the silent/ringer switch (a common "no sound" cause) and, on
-//    modern iOS, can keep the AudioContext itself alive while locked.
-//
-// Architecture:
-//   foreground:  2 routed voices (A/B) -> gain -> master -> tone -> output
-//                + 1 routed preview voice
-//   background:  1 plain <audio> element, NOT routed (survives screen lock)
+// iOS notes:
+//   • navigator.audioSession = "playback" → treat as media so audio ignores
+//     the silent/ringer switch (a common "no sound" cause).
+//   • iOS suspends the AudioContext when the screen locks, which pauses audio.
+//     We do NOT fight that (a second background element caused bandwidth
+//     stutter and didn't work reliably). Instead, on return we RESUME from the
+//     exact position — never restart, never need a refresh.
 // ─────────────────────────────────────────────────────────
 
 const CF_MS = 600;        // crossfade time when switching pad/key
 const VOL_RAMP_MS = 120;  // smoothing so the volume slider doesn't zipper
 const TONE_RAMP_MS = 120;
-const HANDOFF_MS = 350;   // fade when handing audio back from background
+const RESUME_MS = 250;    // fade back in when returning to the tab
 
 // Tone maps a -1..1 knob linearly to a high-shelf gain in dB. The whole range
-// sits well below the unfiltered original (0 dB); the default (a=0) is halfway.
+// sits below the unfiltered original (0 dB); the default (a=0) is the midpoint.
 const TONE_FREQ = 3200;
 const TONE_DARK_DB = -32;  // a=-1, "Darker"
 const TONE_BRIGHT_DB = -3; // a=+1, "Brighter" (still cut — never the original)
@@ -52,16 +47,13 @@ export function createAudioEngine() {
   let tone = null;       // high-shelf tone filter
   let voices = [];       // [{ el, gain }] — two routed voices for crossfading
   let preview = null;    // { el, gain } — routed preview bus
-  let bg = null;         // plain <audio>, NOT routed — plays while screen locked
   let active = 0;        // index of the routed voice in front
   let volume = 0.8;
   let toneAmount = 0;
   let started = false;
   let ok = !!AC;
-  let playing = false;   // intent to play (independent of fg/bg path)
+  let playing = false;   // intent to play
   let currentUrl = "";
-  let hidden = false;    // page is currently backgrounded / screen locked
-  let onBg = false;      // background element is currently carrying audio
 
   function newEl() {
     const el = new Audio();
@@ -100,13 +92,11 @@ export function createAudioEngine() {
       tone.connect(ctx.destination);
       voices = [makeVoice(), makeVoice()];
       preview = makeVoice();
-      bg = newEl();           // not routed -> keeps playing when ctx is suspended
-      bg.muted = true;
-      // Treat as media: ignore the silent switch + allow background playback.
-      try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch { /* not supported */ }
-      // If iOS interrupts the context while we're in the foreground, recover.
+      // Treat as media: ignore the silent switch.
+      try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch { /* unsupported */ }
+      // If iOS interrupts the context while we're still foreground, recover.
       ctx.onstatechange = () => {
-        if (playing && !hidden && ctx.state !== "running") ctx.resume().catch(() => {});
+        if (playing && ctx.state !== "running") ctx.resume().catch(() => {});
       };
       started = true;
     } catch {
@@ -129,41 +119,8 @@ export function createAudioEngine() {
     if (ctx && ctx.state !== "running") ctx.resume().catch(() => {});
   }
 
-  function load(el, url) {
-    if (el.getAttribute("src") === url) return;
-    el.src = url;
-  }
-
   function safePlay(el) {
     try { const p = el.play(); if (p && p.catch) p.catch(() => {}); } catch { /* ignore */ }
-  }
-
-  // Crossfade a routed voice up to `url` and the old one down.
-  function crossfadeTo(url) {
-    const cur = voices[active];
-    const idle = voices[1 - active];
-    load(idle.el, url);
-    idle.el.loop = true;
-    try { idle.el.currentTime = 0; } catch { /* ignore */ }
-    safePlay(idle.el);
-    ramp(idle.gain.gain, 1, CF_MS);
-    ramp(cur.gain.gain, 0, CF_MS);
-    const stale = cur.el;
-    setTimeout(() => { try { stale.pause(); } catch { /* ignore */ } }, CF_MS + 40);
-    active = 1 - active;
-  }
-
-  // Prime the background element (muted) inside the play() gesture so iOS will
-  // let us re-play it later, when the screen locks, without a fresh tap.
-  function primeBg(url) {
-    if (!bg) return;
-    load(bg, url);
-    bg.loop = true;
-    bg.muted = true;
-    try {
-      const p = bg.play();
-      if (p && p.then) p.then(() => { if (!onBg) { try { bg.pause(); } catch { /* ignore */ } } }).catch(() => {});
-    } catch { /* ignore */ }
   }
 
   return {
@@ -177,7 +134,6 @@ export function createAudioEngine() {
       volume = v;
       start();
       if (master) ramp(master.gain, v, VOL_RAMP_MS);
-      if (bg) { try { bg.volume = v; } catch { /* ignore (iOS) */ } }
     },
 
     // amount: -1 (darkest) .. 0 (default) .. +1 (brightest, still cut)
@@ -187,34 +143,38 @@ export function createAudioEngine() {
       if (tone) ramp(tone.gain, toneToDb(toneAmount), TONE_RAMP_MS);
     },
 
-    // Start (or crossfade to) a looping pad.
+    // Start playback, resume the same pad from its position, or crossfade to a
+    // new pad/key. Pressing play after pause resumes — it never restarts.
     play(url) {
       if (!url) return;
       start();
-      if (!started) return; // no Web Audio support — nothing we can drive
+      if (!started) return;
       resumeCtx();
-      currentUrl = url;
       playing = true;
-      if (hidden) {
-        // Started/changed while backgrounded — drive the plain bg element.
-        load(bg, url);
-        bg.loop = true;
-        bg.muted = false;
-        try { bg.volume = volume; } catch { /* ignore */ }
-        try { bg.currentTime = 0; } catch { /* ignore */ }
-        safePlay(bg);
-        onBg = true;
+      const cur = voices[active];
+      if (url === currentUrl && cur.el.getAttribute("src") === url) {
+        // Same pad that was paused — resume from where it stopped.
+        safePlay(cur.el);
+        ramp(cur.gain.gain, 1, RESUME_MS);
         return;
       }
-      onBg = false;
-      crossfadeTo(url);
-      primeBg(url);
+      // New pad/key — crossfade the idle voice up from the start.
+      currentUrl = url;
+      const idle = voices[1 - active];
+      if (idle.el.getAttribute("src") !== url) idle.el.src = url;
+      idle.el.loop = true;
+      try { idle.el.currentTime = 0; } catch { /* ignore */ }
+      safePlay(idle.el);
+      ramp(idle.gain.gain, 1, CF_MS);
+      ramp(cur.gain.gain, 0, CF_MS);
+      const stale = cur.el;
+      setTimeout(() => { try { stale.pause(); } catch { /* ignore */ } }, CF_MS + 40);
+      active = 1 - active;
     },
 
+    // Pause: fade out and pause, but KEEP the position so play() resumes it.
     stop() {
       playing = false;
-      onBg = false;
-      if (bg) { try { bg.pause(); } catch { /* ignore */ } }
       if (!started) return;
       const cur = voices[active];
       ramp(cur.gain.gain, 0, CF_MS);
@@ -222,54 +182,23 @@ export function createAudioEngine() {
       setTimeout(() => { try { stale.pause(); } catch { /* ignore */ } }, CF_MS + 40);
     },
 
-    // Page hidden / screen locked: hand audio to the plain bg element, which
-    // keeps playing even when iOS suspends the AudioContext.
-    onHidden() {
-      hidden = true;
-      if (!started || !playing) return;
-      let t = 0;
-      try { t = voices[active].el.currentTime || 0; } catch { /* ignore */ }
-      try {
-        load(bg, currentUrl);
-        bg.loop = true;
-        bg.muted = false;
-        try { bg.volume = volume; } catch { /* ignore */ }
-        try { if (t) bg.currentTime = t; } catch { /* ignore */ }
-        safePlay(bg);
-        onBg = true;
-      } catch { /* ignore */ }
-      // Pause routed voices — they're silenced by suspension anyway, and this
-      // prevents a double-play on platforms that DON'T suspend.
-      voices.forEach((x) => { try { x.el.pause(); } catch { /* ignore */ } });
-    },
-
-    // Page visible again: resume the context and hand back to filtered playback.
+    // Returning to the tab (iOS may have suspended the context on lock):
+    // resume the context and continue the same pad from its position.
     onVisible() {
-      hidden = false;
       if (!started) return;
       resumeCtx();
-      if (!playing) { if (bg) { try { bg.pause(); } catch { /* ignore */ } } return; }
-      let t = 0;
-      try { t = onBg ? (bg.currentTime || 0) : (voices[active].el.currentTime || 0); } catch { /* ignore */ }
-      const v = voices[active];
-      load(v.el, currentUrl);
-      v.el.loop = true;
-      try { if (t) v.el.currentTime = t; } catch { /* ignore */ }
-      safePlay(v.el);
-      ramp(v.gain.gain, 1, HANDOFF_MS);
-      if (bg && onBg) {
-        const b = bg;
-        setTimeout(() => { try { b.pause(); b.muted = true; } catch { /* ignore */ } }, HANDOFF_MS);
-      }
-      onBg = false;
+      if (!playing) return;
+      const cur = voices[active];
+      safePlay(cur.el);
+      ramp(cur.gain.gain, 1, RESUME_MS);
     },
 
     playPreview(url) {
       if (!url) return;
       start();
+      if (!started || !preview) return;
       resumeCtx();
-      if (!preview) return;
-      load(preview.el, url);
+      if (preview.el.getAttribute("src") !== url) preview.el.src = url;
       preview.el.loop = true;
       try { preview.el.currentTime = 0; } catch { /* ignore */ }
       safePlay(preview.el);

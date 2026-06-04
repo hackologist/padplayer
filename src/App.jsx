@@ -25,8 +25,8 @@ const padUrls = (folder) =>
 
 // Safe localStorage (wrapped so it can't crash; works once deployed).
 const safeGet = (k) => { try { return window.localStorage.getItem(k); } catch { return null; } };
-const safeSet = (k, v) => { try { window.localStorage.setItem(k, v); } catch {} };
-const safeDel = (k) => { try { window.localStorage.removeItem(k); } catch {} };
+const safeSet = (k, v) => { try { window.localStorage.setItem(k, v); } catch { /* ignore */ } };
+const safeDel = (k) => { try { window.localStorage.removeItem(k); } catch { /* ignore */ } };
 
 // Each texture has a URL per key (12 looping files).
 // FREE: urls filled in directly, plays for everyone.
@@ -90,7 +90,9 @@ const TEXTURES = [
 // the key matches this product, then returns short-lived signed URLs
 // for the 12 key files. Store the result so playback works in-page.
 // ─────────────────────────────────────────────────────────
-async function verifyLicense({ textureId, email }) {
+async function verifyLicense({ email }) {
+  // NOTE: the real version also takes `textureId` and posts both to /api/verify
+  // (Gumroad license check -> signed URLs). Stub for now.
   await new Promise((r) => setTimeout(r, 700)); // simulate network
   const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((email || "").trim());
   if (!valid) throw new Error("Please enter a valid email address.");
@@ -147,13 +149,30 @@ export default function App() {
   useEffect(() => { engine.setVolume(volume); }, [engine, volume]);
   useEffect(() => { engine.setTone(tone); }, [engine, tone]);
 
+  // Hand audio to/from the background element when the screen locks or the tab
+  // is hidden, and resume cleanly on return (fixes the "needs refresh" glitch).
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === "hidden") engine.onHidden();
+      else engine.onVisible();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("pageshow", onVis);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("pageshow", onVis);
+    };
+  }, [engine]);
+
   // On load: if we remembered the buyer's email, silently restore their
   // pads (re-verifies to fetch fresh signed URLs — no typing needed).
   useEffect(() => {
     const savedEmail = safeGet(STORAGE_KEY);
     if (!savedEmail) return;
+    /* eslint-disable react-hooks/set-state-in-effect */
     setEmail(savedEmail);
     setRestoring(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
     (async () => {
       for (const pad of TEXTURES.filter((t) => !t.free)) {
         try {
@@ -179,7 +198,12 @@ export default function App() {
   useEffect(() => {
     if (!playingRef.current) return;
     const url = urlFor(selectedTexture, activeKey);
-    if (!url) { engine.stop(); setPlaying(false); return; }
+    if (!url) {
+      engine.stop();
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPlaying(false);
+      return;
+    }
     engine.play(url);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, activeKey]);
@@ -195,6 +219,36 @@ export default function App() {
       setPlaying(true);
     }
   }
+
+  // Move the active key up/down (used by headphone/lock-screen skip).
+  function shiftKey(delta) {
+    const i = KEYS.indexOf(activeKey);
+    setActiveKey(KEYS[(i + delta + KEYS.length) % KEYS.length]);
+  }
+
+  // Lock-screen / headphone "now playing" + transport. Handlers only fire on a
+  // real user action (tap on lock screen, headphone button) — nothing here
+  // auto-stops playback, so it can't interrupt background audio on lock.
+  useEffect(() => {
+    if (!("mediaSession" in navigator)) return;
+    const ms = navigator.mediaSession;
+    try {
+      ms.metadata = new MediaMetadata({
+        title: `${selectedTexture.name} — Key of ${activeKey}`,
+        artist: "Kairo Audio",
+        album: "Online Worship Pad Player",
+        artwork: [{ src: "/og-image.jpg", sizes: "512x512", type: "image/jpeg" }],
+      });
+      ms.playbackState = playing ? "playing" : "paused";
+    } catch { /* ignore */ }
+    const set = (action, fn) => { try { ms.setActionHandler(action, fn); } catch { /* ignore */ } };
+    set("play", () => { if (currentUrl) { engine.resume(); engine.play(currentUrl); setPlaying(true); } });
+    set("pause", () => { engine.stop(); setPlaying(false); });
+    set("previoustrack", () => shiftKey(-1));
+    set("nexttrack", () => shiftKey(1));
+    return () => ["play", "pause", "previoustrack", "nexttrack"].forEach((a) => set(a, null));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [engine, selectedTexture, activeKey, playing, currentUrl]);
 
   function selectTexture(t) {
     if (!isUnlocked(t)) { openModal(t); return; }

@@ -57,7 +57,11 @@ export function createAudioEngine() {
 
   function newEl() {
     const el = new Audio();
-    el.preload = "none";
+    // "auto" = buffer the whole pad once it has a src (only set on play), so
+    // playback feeds Web Audio from a full buffer instead of trickling chunks
+    // over the network mid-stream (which pulses/stutters). No src on page load,
+    // so this never affects initial page speed.
+    el.preload = "auto";
     el.crossOrigin = "anonymous";
     el.loop = true;
     el.setAttribute("playsinline", "");

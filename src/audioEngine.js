@@ -42,47 +42,78 @@ function toneToDb(amt) {
   return TONE_DARK_DB + ((a + 1) / 2) * (TONE_BRIGHT_DB - TONE_DARK_DB);
 }
 
-// Plain-audio engine: a single bare <audio> element, NO Web Audio. Used to
-// diagnose/fix the iOS transpose bug — routing through MediaElementAudioSourceNode
-// makes iOS periodically resync its clock by briefly speeding playback (heard as
-// a transpose up then back). A plain element plays at native rate, drift-free.
-// Trade-off: no tone EQ, no gain crossfade (key changes are a clean cut), and
-// iOS ignores in-app volume (use the phone's volume buttons).
-function createPlainEngine() {
-  const el = new Audio();
-  el.preload = "auto";
-  el.loop = true;
-  el.setAttribute("playsinline", "");
+// Plain-audio engine: bare <audio> element(s), NO Web Audio for the CURRENT pad.
+// A plain element plays at native rate (no MediaElementSource clock resync = no
+// transpose) and keeps playing when the screen locks (background).
+//
+// Optional fade-out crossfade (opts.fadeOut): on a key change, the NEW pad
+// starts immediately on a fresh plain element (still background-safe, no
+// transpose), while the OLD element is routed through a SHORT-LIVED Web Audio
+// gain and faded out over ~fadeMs, then discarded. Web Audio touches only the
+// throwaway old element for a few seconds (screen on, user just tapped), so it
+// can never transpose or affect background. iOS can't fade a plain element's
+// volume, so the new pad can't fade *in* — it enters at full as the old recedes.
+function createPlainEngine(opts = {}) {
+  const AC = typeof window !== "undefined" ? (window.AudioContext || window.webkitAudioContext) : null;
+  const FADE_MS = opts.fadeOut ? (opts.fadeMs || 4000) : 0;
+  let ctx = null;
+  let cur = null;        // current plain <audio> element
+  let curUrl = "";
   let playing = false;
-  let currentUrl = "";
+  let volume = 0.8;
+
   try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch { /* unsupported */ }
-  const safePlay = () => { try { const p = el.play(); if (p && p.catch) p.catch(() => {}); } catch { /* ignore */ } };
+
+  function newEl(url) {
+    const el = new Audio();
+    el.preload = "auto"; el.loop = true; el.setAttribute("playsinline", "");
+    el.src = url; try { el.volume = volume; } catch { /* iOS */ }
+    return el;
+  }
+  function safePlay(el) { try { const p = el.play(); if (p && p.catch) p.catch(() => {}); } catch { /* ignore */ } }
+  function ensureCtx() {
+    if (!ctx && AC && FADE_MS) { try { ctx = new AC(); } catch { /* ignore */ } }
+    if (ctx && ctx.state !== "running") ctx.resume().catch(() => {});
+  }
+  function fadeOutDiscard(el) {
+    if (!ctx) { try { el.pause(); } catch { /* ignore */ } return; }
+    try {
+      const s = ctx.createMediaElementSource(el);
+      const g = ctx.createGain();
+      const t = ctx.currentTime;
+      g.gain.setValueAtTime(volume || 1, t);
+      g.gain.linearRampToValueAtTime(0.0001, t + FADE_MS / 1000);
+      s.connect(g); g.connect(ctx.destination);
+      setTimeout(() => { try { el.pause(); s.disconnect(); g.disconnect(); } catch { /* ignore */ } }, FADE_MS + 200);
+    } catch { try { el.pause(); } catch { /* ignore */ } }
+  }
+
   return {
     get ok() { return true; },
     isPlaying() { return playing; },
-    getDebug() { return { rate: 0, state: el.paused ? "paused" : "playing(plain)", ct: el.currentTime || 0, pr: el.playbackRate, src: (el.getAttribute("src") || "").split("/").pop() }; },
-    resume() { try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch { /* ignore */ } },
-    setVolume(v) { try { el.volume = v; } catch { /* iOS ignores */ } },
-    setTone() { /* no EQ in plain mode */ },
+    getDebug() { return { rate: 0, state: cur && !cur.paused ? ("playing(plain" + (FADE_MS ? "+fade" : "") + ")") : "paused", ct: cur ? cur.currentTime || 0 : 0, pr: cur ? cur.playbackRate : 0, src: cur ? (cur.getAttribute("src") || "").split("/").pop() : "—" }; },
+    resume() { try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch { /* ignore */ } ensureCtx(); },
+    setVolume(v) { volume = v; if (cur) { try { cur.volume = v; } catch { /* iOS */ } } },
+    setTone() { /* tone is baked into the files */ },
     play(url) {
       if (!url) return;
       playing = true;
-      if (url === currentUrl && el.getAttribute("src") === url) { safePlay(); return; } // resume same pad
-      currentUrl = url;
-      if (el.getAttribute("src") !== url) el.src = url;
-      el.loop = true;
-      try { el.currentTime = 0; } catch { /* ignore */ }
-      safePlay();
+      ensureCtx();
+      if (cur && curUrl === url && cur.getAttribute("src") === url) { safePlay(cur); return; } // resume same pad
+      const old = cur;
+      cur = newEl(url); curUrl = url;
+      safePlay(cur);
+      if (old) { if (FADE_MS) fadeOutDiscard(old); else { try { old.pause(); } catch { /* ignore */ } } }
     },
-    stop() { playing = false; try { el.pause(); } catch { /* ignore */ } },
-    onVisible() { if (playing) safePlay(); },
-    playPreview() { /* not used in diagnostic mode */ },
+    stop() { playing = false; if (cur) { try { cur.pause(); } catch { /* ignore */ } } },
+    onVisible() { if (playing && cur) safePlay(cur); },
+    playPreview() {},
     stopPreview() {},
   };
 }
 
 export function createAudioEngine(opts = {}) {
-  if (opts.plain) return createPlainEngine();
+  if (opts.plain) return createPlainEngine(opts);
   let ctx = null;
   let master = null;     // overall volume
   let tone = null;       // high-shelf tone filter

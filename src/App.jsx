@@ -172,9 +172,13 @@ export default function App() {
   // Plain <audio> playback by default. Web Audio's MediaElementSource caused a
   // periodic pitch transpose on iOS; the dark tone is now baked into the files.
   // (?engine=webaudio re-enables the old Web Audio path for testing only.)
-  const [engine] = useState(() => createAudioEngine({
-    plain: typeof window === "undefined" || new URLSearchParams(window.location.search).get("engine") !== "webaudio",
-  }));
+  const [engine] = useState(() => {
+    const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
+    return createAudioEngine({
+      plain: q.get("engine") !== "webaudio",
+      fadeOut: q.get("xfade") === "1", // ?xfade=1 -> fade the outgoing key out (staging test)
+    });
+  });
 
   const previewTimer = useRef(null);
   const playingRef = useRef(false);

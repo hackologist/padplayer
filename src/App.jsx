@@ -126,23 +126,23 @@ async function verifyLicense({ email }) {
 const FAQS = [
   {
     q: "Is this worship pad player free?",
-    a: "Yes — the Online Worship Pad Player is free to use in all 12 keys, with no download and no sign-up. Additional premium pad textures from Kairo Audio are available to unlock if you want more variety.",
+    a: "Yes, the Online Worship Pad Player is free to use in all 12 keys, with no download and no sign-up. Additional premium pad textures from Kairo Audio are available to unlock if you want more variety.",
   },
   {
     q: "Do I need to download anything or create an account?",
-    a: "No. It runs entirely in your web browser on any phone, tablet, or computer. There's nothing to install and no account required — just open the page and press play.",
+    a: "No. It runs entirely in your web browser on any phone, tablet, or computer. There's nothing to install and no account required. Just open the page and press play.",
   },
   {
     q: "Will the pad keep playing if my screen locks?",
-    a: "On most devices it keeps going, and when you return to the player it picks up right where it left off — no refresh needed. For completely uninterrupted playback during a service, use Stage Mode, which keeps the screen awake so the device never sleeps.",
+    a: "On most devices it keeps going, and when you return to the player it picks up right where it left off, with no refresh needed. For completely uninterrupted playback during a service, use Stage Mode, which keeps the screen awake so the device never sleeps.",
   },
   {
     q: "Can I make the pad brighter or darker?",
-    a: "Yes. Use the tone control to shape the sound — slide toward 'Darker' for a warmer pad that sits gently under the band, or toward 'Brighter' to let it shimmer and open up. Your key, volume, and tone are remembered for your next visit.",
+    a: "Yes. Use the tone control to shape the sound: slide toward 'Darker' for a warmer pad that sits gently under the band, or toward 'Brighter' to let it shimmer and open up. Your key, volume, and tone are remembered for your next visit.",
   },
   {
     q: "What's the difference between the free pad and the paid pads?",
-    a: "The free pad covers all 12 keys and suits most worship moments. The premium pads from Kairo Audio add different textures and moods — ambient, cinematic, warm analog — for when you want a specific atmosphere.",
+    a: "The free pad covers all 12 keys and suits most worship moments. The premium pads from Kairo Audio add different textures and moods (ambient, cinematic, warm analog) for when you want a specific atmosphere.",
   },
 ];
 
@@ -675,17 +675,17 @@ export default function App() {
           </h2>
           <p className="text-sm leading-relaxed text-slate-400 mb-10 text-center">
             Play sustained worship pads and ambient drone pads in all 12 keys, right from your
-            browser — no download and no sign up. Whether you lead worship solo, run a small band,
+            browser, with no download and no sign up. Whether you lead worship solo, run a small band,
             or just want a fuller sound, these worship textures fill the room, smooth your song
             transitions, and hold an atmosphere for prayer and spontaneous worship. Run it from a
-            phone, tablet, or laptop on stage — no MainStage, Ableton, or extra software required.
+            phone, tablet, or laptop on stage, with no MainStage, Ableton, or extra software required.
           </p>
 
           <div className="space-y-7 text-left">
             <div>
               <h3 className="text-base font-medium text-slate-200 mb-2">What are worship pads and drone pads?</h3>
               <p className="text-sm leading-relaxed text-slate-400">
-                Worship pads — also called ambient pads or worship textures — are sustained, evolving
+                Worship pads, also called ambient pads or worship textures, are sustained, evolving
                 sounds that hold a single key underneath your music. A drone pad is the simplest form:
                 one root note held in a chosen key, giving the band an open foundation to play over.
                 Together they add depth and atmosphere, glue your worship set together, and fill the
@@ -699,7 +699,7 @@ export default function App() {
                 band. Hold it through transitions so there's never an awkward silence between songs,
                 change keys when you change songs, and bring the pad up on its own during prayer,
                 communion, scripture reading, or spontaneous worship. Keep the level low so the
-                worship pad supports the room rather than competing with the band — especially
+                worship pad supports the room rather than competing with the band. This is especially
                 helpful for solo worship leaders and smaller teams who want a fuller sound.
               </p>
             </div>
@@ -707,7 +707,7 @@ export default function App() {
               <h3 className="text-base font-medium text-slate-200 mb-2">Choosing the right key</h3>
               <p className="text-sm leading-relaxed text-slate-400">
                 Set the pad to the key of the song you're playing, then change keys whenever you move
-                to a new song — tapping a new key crossfades smoothly so the change is seamless. For
+                to a new song, and tapping a new key crossfades smoothly so the change is seamless. For
                 open, spontaneous moments, pick a key that suits your singers and let the sustained
                 drone hold while the band improvises over the top.
               </p>
@@ -716,7 +716,7 @@ export default function App() {
               <h3 className="text-base font-medium text-slate-200 mb-2">Playing pads live from your phone or iPad</h3>
               <p className="text-sm leading-relaxed text-slate-400">
                 Open it on a phone, iPad, or
-                laptop, plug into your sound system or in-ear monitors, and press play — no MainStage,
+                laptop, plug into your sound system or in-ear monitors, and press play, with no MainStage,
                 Ableton, or downloads needed. Turn on Stage Mode for a big, glanceable key you can
                 read from across the platform, and the screen stays awake while a pad plays so your
                 device never sleeps mid-set. Shape the sound brighter or darker with the tone control,

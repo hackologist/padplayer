@@ -20,6 +20,7 @@
 //     exact position — never restart, never need a refresh.
 // ─────────────────────────────────────────────────────────
 
+const FILE_RATE = 44100;  // sample rate of the pad files (pin the context to it)
 const CF_MS = 600;        // crossfade time when switching pad/key
 const VOL_RAMP_MS = 120;  // smoothing so the volume slider doesn't zipper
 const TONE_RAMP_MS = 120;
@@ -85,7 +86,11 @@ export function createAudioEngine() {
   function start() {
     if (started || !ok) return;
     try {
-      ctx = new AC();
+      // iOS Safari stutters, distorts, and pitch-drifts (a slow speed-up then
+      // resync, ~once a minute) when the AudioContext sample rate doesn't match
+      // the audio it's routing — a documented WebKit bug. Our pads are 44.1kHz,
+      // so pin the context to 44100 to keep MediaElementSource in sync.
+      try { ctx = new AC({ sampleRate: FILE_RATE }); } catch { ctx = new AC(); }
       master = ctx.createGain();
       master.gain.value = volume;
       tone = ctx.createBiquadFilter();

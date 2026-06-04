@@ -86,18 +86,38 @@
     </script>
   </head>
   <body>
-    <!-- Instant-paint shell: shows branded content + spinner immediately on
-         the dark background, so mobile users see something the moment the
-         HTML arrives instead of staring at a blank screen while the JS
-         bundle downloads and parses. React replaces #root on mount. -->
+    <!-- Instant-paint loading screen: pure inline HTML/CSS so it renders the
+         moment the HTML arrives (before the JS bundle downloads/parses). On a
+         fast connection it barely flashes; on a slow one it shows a branded,
+         on-theme animation — a breathing play button with sound-wave ripples.
+         React replaces #root on mount. -->
     <div id="root">
-      <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3rem 1.5rem;text-align:center;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#e2e8f0">
-        <div style="width:60px;height:60px;border-radius:9999px;border:3px solid rgba(129,140,248,.35);border-top-color:#7c3aed;animation:pp-spin 1s linear infinite"></div>
-        <h1 style="margin:1.6rem 0 0;font-family:'Anton',Impact,sans-serif;font-weight:400;text-transform:uppercase;font-size:2.25rem;line-height:.95;letter-spacing:-.01em;color:#f1f5f9">Online Worship Pad Player</h1>
-        <p style="margin:.75rem 0 0;font-size:.7rem;letter-spacing:.3em;text-transform:uppercase;color:rgba(165,180,252,.7)">By Kairo Audio</p>
+      <div class="pp-load">
+        <div class="pp-orb">
+          <span class="pp-ring"></span>
+          <span class="pp-ring pp-ring2"></span>
+          <span class="pp-ring pp-ring3"></span>
+          <span class="pp-core">
+            <svg width="32" height="32" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="#fff"/></svg>
+          </span>
+        </div>
+        <h1 class="pp-title">Online Worship Pad Player</h1>
+        <p class="pp-sub">By Kairo Audio</p>
       </div>
     </div>
-    <style>@keyframes pp-spin{to{transform:rotate(360deg)}}</style>
+    <style>
+      .pp-load{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3rem 1.5rem;text-align:center;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#e2e8f0}
+      .pp-orb{position:relative;width:120px;height:120px;display:flex;align-items:center;justify-content:center;margin-bottom:2rem}
+      .pp-ring{position:absolute;inset:0;border-radius:9999px;border:2px solid #818cf8;opacity:0;animation:pp-ripple 2.4s cubic-bezier(.2,.6,.3,1) infinite}
+      .pp-ring2{animation-delay:.8s}
+      .pp-ring3{animation-delay:1.6s}
+      .pp-core{position:relative;width:80px;height:80px;border-radius:9999px;display:flex;align-items:center;justify-content:center;padding-left:4px;background:linear-gradient(135deg,#818cf8,#7c3aed);box-shadow:0 0 36px 0 rgba(124,58,237,.55);animation:pp-breathe 2.4s ease-in-out infinite}
+      .pp-title{margin:0;font-family:'Anton',Impact,sans-serif;font-weight:400;text-transform:uppercase;font-size:2.25rem;line-height:.95;letter-spacing:-.01em;color:#f1f5f9}
+      .pp-sub{margin:.85rem 0 0;font-size:.7rem;letter-spacing:.3em;text-transform:uppercase;color:rgba(165,180,252,.7)}
+      @keyframes pp-ripple{0%{transform:scale(.55);opacity:.55}100%{transform:scale(1.9);opacity:0}}
+      @keyframes pp-breathe{0%,100%{transform:scale(1);box-shadow:0 0 28px 0 rgba(124,58,237,.45)}50%{transform:scale(1.07);box-shadow:0 0 56px 8px rgba(124,58,237,.72)}}
+      @media (prefers-reduced-motion:reduce){.pp-ring,.pp-core{animation:none}}
+    </style>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

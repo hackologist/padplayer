@@ -103,9 +103,20 @@ export function createAudioEngine() {
       preview = makeVoice();
       // Treat as media: ignore the silent switch.
       try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch { /* unsupported */ }
-      // If iOS interrupts the context while we're still foreground, recover.
+      // iOS sporadically "interrupts" the AudioContext (screen off, a
+      // notification, another app's audio). The media element MUST be paused
+      // during the interruption — otherwise it keeps advancing while the
+      // context is frozen, then "catches up" by briefly playing fast when the
+      // context resumes, which is heard as the pad jumping up a key for a few
+      // seconds before resyncing. Pausing freezes its position so resume is
+      // clean and in-sync.
       ctx.onstatechange = () => {
-        if (playing && ctx.state !== "running") ctx.resume().catch(() => {});
+        if (ctx.state === "running") {
+          if (playing) safePlay(voices[active].el);
+        } else {
+          voices.forEach((v) => { try { v.el.pause(); } catch { /* ignore */ } });
+          if (playing) ctx.resume().catch(() => {});
+        }
       };
       started = true;
     } catch {
@@ -135,6 +146,18 @@ export function createAudioEngine() {
   return {
     get ok() { return ok; },
     isPlaying() { return playing; },
+
+    // Live diagnostics for the ?debug overlay.
+    getDebug() {
+      const el = started && voices[active] ? voices[active].el : null;
+      return {
+        rate: ctx ? ctx.sampleRate : 0,
+        state: ctx ? ctx.state : "—",
+        ct: el ? el.currentTime : 0,
+        pr: el ? el.playbackRate : 0,
+        src: el ? (el.getAttribute("src") || "").split("/").pop() : "—",
+      };
+    },
 
     // Call inside a user gesture (tap) to satisfy mobile autoplay rules.
     resume() { start(); resumeCtx(); },
@@ -195,11 +218,8 @@ export function createAudioEngine() {
     // resume the context and continue the same pad from its position.
     onVisible() {
       if (!started) return;
-      resumeCtx();
-      if (!playing) return;
-      const cur = voices[active];
-      safePlay(cur.el);
-      ramp(cur.gain.gain, 1, RESUME_MS);
+      resumeCtx(); // if the context was interrupted, onstatechange replays cleanly
+      if (playing && ctx.state === "running") safePlay(voices[active].el);
     },
 
     playPreview(url) {

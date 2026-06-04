@@ -149,6 +149,11 @@ export default function App() {
   useEffect(() => { engine.setVolume(volume); }, [engine, volume]);
   useEffect(() => { engine.setTone(tone); }, [engine, tone]);
 
+  // Diagnostics hook: visit ?debug to expose the engine for inspection/testing.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("debug")) window.__padEngine = engine;
+  }, [engine]);
+
   // When returning to the tab (iOS may have suspended audio on screen lock),
   // resume and continue from the exact position — no restart, no refresh.
   useEffect(() => {

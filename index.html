@@ -22,8 +22,14 @@
     <meta name="robots" content="index, follow" />
     <link rel="canonical" href="https://onlinepadplayer.com/" />
 
-    <!-- Favicon (you will add /favicon.svg in the public folder) -->
+    <!-- Favicons: .ico + raster PNGs so Google Search and all browsers show
+         the brand icon (Google's crawler needs /favicon.ico + a square raster,
+         not an SVG-only icon). -->
+    <link rel="icon" href="/favicon.ico" sizes="any" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicon-180.png" />
+    <link rel="manifest" href="/site.webmanifest" />
 
     <!-- Preload the self-hosted headline font so it paints fast -->
     <link

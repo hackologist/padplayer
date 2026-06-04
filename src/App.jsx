@@ -8,6 +8,10 @@ import { initAnalytics, track } from "./analytics";
 // ─────────────────────────────────────────────────────────
 const KAIRO_URL = "https://kairoaudio.com";
 const COFFEE_URL = "#"; // <- your Ko-fi / Stripe / BuyMeACoffee link
+// On the live (production) site, the not-yet-launched paid pads + tip jar show
+// a greyed "Coming soon". On staging/local they stay fully functional so we can
+// build/test them. Flag is injected at build time (see vite.config.js).
+const COMING_SOON = __COMING_SOON__;
 const STORAGE_KEY = "kairo_buyer_email";
 const PREFS_KEY = "pp_prefs"; // remembers last key / volume / tone across visits
 
@@ -342,6 +346,7 @@ export default function App() {
   // On load: if we remembered the buyer's email, silently restore their
   // pads (re-verifies to fetch fresh signed URLs — no typing needed).
   useEffect(() => {
+    if (COMING_SOON) return; // paid pads aren't live yet — nothing to restore
     const savedEmail = safeGet(STORAGE_KEY);
     if (!savedEmail) return;
     /* eslint-disable react-hooks/set-state-in-effect */
@@ -591,11 +596,32 @@ export default function App() {
         {/* Textures */}
         <section className="mt-12">
           <h2 className="text-center text-2xl font-light mb-1">More textures</h2>
-          <p className="text-center text-sm text-slate-400 mb-1">Unlock different pad sounds by Kairo Audio.</p>
-          {restoring && <p className="text-center text-xs text-indigo-300/70 mb-5">Restoring your pads…</p>}
+          <p className="text-center text-sm text-slate-400 mb-1">
+            {COMING_SOON ? "More worship pad textures from Kairo Audio — coming soon." : "Unlock different pad sounds by Kairo Audio."}
+          </p>
+          {!COMING_SOON && restoring && <p className="text-center text-xs text-indigo-300/70 mb-5">Restoring your pads…</p>}
           {!restoring && <div className="mb-5" />}
           <div className="grid sm:grid-cols-3 gap-4">
             {TEXTURES.filter((t) => !t.free).map((pad) => {
+              if (COMING_SOON) {
+                // Live site: greyed teaser, no buy/unlock/preview until launch.
+                return (
+                  <div key={pad.id} className="relative rounded-2xl border border-white/10 bg-white/[0.02] p-5 flex flex-col opacity-60">
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="relative flex items-center justify-center w-11 h-11 rounded-full bg-white/10 shrink-0">
+                        <Lock className="w-4 h-4 text-slate-400" />
+                      </span>
+                      <div className="min-w-0">
+                        <p className="font-medium leading-tight">{pad.name}</p>
+                        <p className="text-xs text-slate-400 truncate">{pad.desc}</p>
+                      </div>
+                    </div>
+                    <span className="mt-auto inline-flex items-center justify-center px-4 py-2.5 rounded-full bg-white/5 text-[11px] uppercase tracking-widest text-slate-400">
+                      Coming soon
+                    </span>
+                  </div>
+                );
+              }
               const isPreviewing = previewing === pad.id;
               const owned = isUnlocked(pad);
               const isSelected = selectedId === pad.id;
@@ -642,7 +668,7 @@ export default function App() {
               );
             })}
           </div>
-          {anyOwned && (
+          {!COMING_SOON && anyOwned && (
             <p className="text-center mt-5 text-xs text-slate-500">
               Unlocked as {email}.{" "}
               <button onClick={forget} className="underline hover:text-slate-300">Not you?</button>
@@ -730,18 +756,24 @@ export default function App() {
             <Coffee className="w-7 h-7 text-amber-300/80 mb-3" />
             <h3 className="text-lg font-light mb-1">Enjoying the pads?</h3>
             <p className="text-sm text-slate-400 mb-5 max-w-xs">This player is free and always will be. Support helps keep it running.</p>
-            <div className="flex flex-wrap justify-center gap-3">
-              {["$3", "$5", "$10"].map((amt) => (
-                <a key={amt} href={COFFEE_URL} target="_blank" rel="noreferrer"
-                  onClick={() => track("coffee_click", { amount: amt })}
-                  className="px-5 py-2.5 rounded-full bg-amber-400/90 text-slate-900 text-sm font-semibold hover:bg-amber-300 transition-colors">{amt}</a>
-              ))}
-              <a href={COFFEE_URL} target="_blank" rel="noreferrer"
-                onClick={() => track("coffee_click", { amount: "custom" })}
-                className="px-5 py-2.5 rounded-full bg-white/10 text-sm font-medium hover:bg-white/20 transition-colors inline-flex items-center gap-1.5">
-                <Heart className="w-3.5 h-3.5" /> Custom
-              </a>
-            </div>
+            {COMING_SOON ? (
+              <span className="px-5 py-2.5 rounded-full bg-white/5 text-[11px] uppercase tracking-widest text-slate-400">
+                Support options coming soon
+              </span>
+            ) : (
+              <div className="flex flex-wrap justify-center gap-3">
+                {["$3", "$5", "$10"].map((amt) => (
+                  <a key={amt} href={COFFEE_URL} target="_blank" rel="noreferrer"
+                    onClick={() => track("coffee_click", { amount: amt })}
+                    className="px-5 py-2.5 rounded-full bg-amber-400/90 text-slate-900 text-sm font-semibold hover:bg-amber-300 transition-colors">{amt}</a>
+                ))}
+                <a href={COFFEE_URL} target="_blank" rel="noreferrer"
+                  onClick={() => track("coffee_click", { amount: "custom" })}
+                  className="px-5 py-2.5 rounded-full bg-white/10 text-sm font-medium hover:bg-white/20 transition-colors inline-flex items-center gap-1.5">
+                  <Heart className="w-3.5 h-3.5" /> Custom
+                </a>
+              </div>
+            )}
           </div>
         </section>
 

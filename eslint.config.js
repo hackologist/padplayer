@@ -14,8 +14,13 @@ export default defineConfig([
       reactRefresh.configs.vite,
     ],
     languageOptions: {
-      globals: globals.browser,
+      globals: { ...globals.browser, __COMING_SOON__: 'readonly' },
       parserOptions: { ecmaFeatures: { jsx: true } },
     },
+  },
+  {
+    // Build/config files run in Node (e.g. vite.config.js uses process.env).
+    files: ['*.config.js'],
+    languageOptions: { globals: globals.node },
   },
 ])

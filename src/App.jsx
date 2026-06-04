@@ -288,6 +288,18 @@ export default function App() {
     return () => { cancelled = true; release(); document.removeEventListener("visibilitychange", onVisible); };
   }, [stageMode, playing]);
 
+  // Lock page scroll while Stage Mode is open: removes the scrollbar and stops
+  // Safari leaving repaint/blur artifacts ("floating bits" of the big letter)
+  // when the page scrolls behind the fixed fullscreen overlay.
+  useEffect(() => {
+    if (!stageMode) return;
+    const html = document.documentElement, body = document.body;
+    const prevHtml = html.style.overflow, prevBody = body.style.overflow;
+    html.style.overflow = "hidden";
+    body.style.overflow = "hidden";
+    return () => { html.style.overflow = prevHtml; body.style.overflow = prevBody; };
+  }, [stageMode]);
+
   // Stage Mode keyboard: Esc exits, ←/→ step the key (desktop convenience).
   useEffect(() => {
     if (!stageMode) return;
@@ -815,7 +827,7 @@ export default function App() {
 
           {/* Big glanceable key */}
           <div className="relative flex-1 flex flex-col items-center justify-center min-h-0 px-4">
-            <span className="font-bold leading-none" style={{ fontFamily: "'Anton', Impact, sans-serif", fontSize: "clamp(6rem, 30vw, 16rem)" }}>
+            <span className="font-bold leading-none" style={{ fontFamily: "'Anton', Impact, sans-serif", fontSize: "clamp(6rem, 30vw, 16rem)", transform: "translateZ(0)", willChange: "transform" }}>
               {activeKey}
             </span>
             <p className="mt-1 text-[11px] uppercase tracking-widest text-slate-500">{playing ? "Playing" : "Paused"}</p>

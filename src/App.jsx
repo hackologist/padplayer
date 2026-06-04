@@ -173,8 +173,11 @@ export default function App() {
   const [error, setError] = useState("");
   const [restoring, setRestoring] = useState(false);
 
-  // One Web Audio engine for the whole app (created once, lazily).
-  const [engine] = useState(createAudioEngine);
+  // One audio engine for the whole app (created once). ?engine=plain forces a
+  // bare <audio> element (no Web Audio) to test/fix the iOS transpose bug.
+  const [engine] = useState(() => createAudioEngine({
+    plain: typeof window !== "undefined" && new URLSearchParams(window.location.search).get("engine") === "plain",
+  }));
 
   const previewTimer = useRef(null);
   const playingRef = useRef(false);

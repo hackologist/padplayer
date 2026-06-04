@@ -42,7 +42,47 @@ function toneToDb(amt) {
   return TONE_DARK_DB + ((a + 1) / 2) * (TONE_BRIGHT_DB - TONE_DARK_DB);
 }
 
-export function createAudioEngine() {
+// Plain-audio engine: a single bare <audio> element, NO Web Audio. Used to
+// diagnose/fix the iOS transpose bug — routing through MediaElementAudioSourceNode
+// makes iOS periodically resync its clock by briefly speeding playback (heard as
+// a transpose up then back). A plain element plays at native rate, drift-free.
+// Trade-off: no tone EQ, no gain crossfade (key changes are a clean cut), and
+// iOS ignores in-app volume (use the phone's volume buttons).
+function createPlainEngine() {
+  const el = new Audio();
+  el.preload = "auto";
+  el.loop = true;
+  el.setAttribute("playsinline", "");
+  let playing = false;
+  let currentUrl = "";
+  try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch { /* unsupported */ }
+  const safePlay = () => { try { const p = el.play(); if (p && p.catch) p.catch(() => {}); } catch { /* ignore */ } };
+  return {
+    get ok() { return true; },
+    isPlaying() { return playing; },
+    getDebug() { return { rate: 0, state: el.paused ? "paused" : "playing(plain)", ct: el.currentTime || 0, pr: el.playbackRate, src: (el.getAttribute("src") || "").split("/").pop() }; },
+    resume() { try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch { /* ignore */ } },
+    setVolume(v) { try { el.volume = v; } catch { /* iOS ignores */ } },
+    setTone() { /* no EQ in plain mode */ },
+    play(url) {
+      if (!url) return;
+      playing = true;
+      if (url === currentUrl && el.getAttribute("src") === url) { safePlay(); return; } // resume same pad
+      currentUrl = url;
+      if (el.getAttribute("src") !== url) el.src = url;
+      el.loop = true;
+      try { el.currentTime = 0; } catch { /* ignore */ }
+      safePlay();
+    },
+    stop() { playing = false; try { el.pause(); } catch { /* ignore */ } },
+    onVisible() { if (playing) safePlay(); },
+    playPreview() { /* not used in diagnostic mode */ },
+    stopPreview() {},
+  };
+}
+
+export function createAudioEngine(opts = {}) {
+  if (opts.plain) return createPlainEngine();
   let ctx = null;
   let master = null;     // overall volume
   let tone = null;       // high-shelf tone filter

@@ -217,15 +217,10 @@ export default function App() {
     }
   }
 
-  // Move the active key up/down (used by headphone/lock-screen skip).
-  function shiftKey(delta) {
-    const i = KEYS.indexOf(activeKey);
-    setActiveKey(KEYS[(i + delta + KEYS.length) % KEYS.length]);
-  }
-
-  // Lock-screen / headphone "now playing" + transport. Handlers only fire on a
-  // real user action (tap on lock screen, headphone button) — nothing here
-  // auto-stops playback, so it can't interrupt background audio on lock.
+  // Lock-screen / headphone "now playing" + transport. Only play/pause are
+  // wired — and ONLY to real user actions. We deliberately do NOT register
+  // next/previous-track handlers: the OS, AirPods, Bluetooth, or the lock
+  // screen can fire those on their own, which would spuriously change the key.
   useEffect(() => {
     if (!("mediaSession" in navigator)) return;
     const ms = navigator.mediaSession;
@@ -241,10 +236,7 @@ export default function App() {
     const set = (action, fn) => { try { ms.setActionHandler(action, fn); } catch { /* ignore */ } };
     set("play", () => { if (currentUrl) { engine.resume(); engine.play(currentUrl); setPlaying(true); } });
     set("pause", () => { engine.stop(); setPlaying(false); });
-    set("previoustrack", () => shiftKey(-1));
-    set("nexttrack", () => shiftKey(1));
-    return () => ["play", "pause", "previoustrack", "nexttrack"].forEach((a) => set(a, null));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => ["play", "pause"].forEach((a) => set(a, null));
   }, [engine, selectedTexture, activeKey, playing, currentUrl]);
 
   function selectTexture(t) {

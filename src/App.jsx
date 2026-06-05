@@ -18,6 +18,14 @@ const PREFS_KEY = "pp_prefs"; // remembers last key / volume across visits
 const KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const PREVIEW_SECONDS = 2;
 
+// Can we actually control volume in software? iOS ignores HTMLAudioElement.volume
+// (it returns 1 no matter what you set), so the in-app slider does nothing there
+// — we hide it and let the phone's hardware buttons handle volume. Desktop/Android
+// honor it, so we show it.
+const VOLUME_CONTROLLABLE = (() => {
+  try { const a = new Audio(); a.volume = 0.5; return a.volume === 0.5; } catch { return false; }
+})();
+
 const emptyKeyMap = () => KEYS.reduce((acc, k) => ((acc[k] = ""), acc), {});
 
 // Build the 12 per-key URLs for a free pad hosted in /public/pads/<folder>/.
@@ -172,13 +180,9 @@ export default function App() {
   // Plain <audio> playback by default. Web Audio's MediaElementSource caused a
   // periodic pitch transpose on iOS; the dark tone is now baked into the files.
   // (?engine=webaudio re-enables the old Web Audio path for testing only.)
-  const [engine] = useState(() => {
-    const q = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams();
-    return createAudioEngine({
-      plain: q.get("engine") !== "webaudio",
-      fadeOut: q.get("xfade") === "1", // ?xfade=1 -> fade the outgoing key out (staging test)
-    });
-  });
+  const [engine] = useState(() => createAudioEngine({
+    plain: typeof window === "undefined" || new URLSearchParams(window.location.search).get("engine") !== "webaudio",
+  }));
 
   const previewTimer = useRef(null);
   const playingRef = useRef(false);
@@ -544,12 +548,14 @@ export default function App() {
           </div>
 
           <div className="space-y-4 max-w-sm mx-auto">
-            <div className="flex items-center gap-3">
-              <Volume2 className="w-5 h-5 text-slate-400 shrink-0" aria-label="Volume" />
-              <input type="range" min="0" max="1" step="0.01" value={volume}
-                onChange={(e) => setVolume(parseFloat(e.target.value))}
-                className="w-full accent-indigo-500" aria-label="Volume" />
-            </div>
+            {VOLUME_CONTROLLABLE && (
+              <div className="flex items-center gap-3">
+                <Volume2 className="w-5 h-5 text-slate-400 shrink-0" aria-label="Volume" />
+                <input type="range" min="0" max="1" step="0.01" value={volume}
+                  onChange={(e) => setVolume(parseFloat(e.target.value))}
+                  className="w-full accent-indigo-500" aria-label="Volume" />
+              </div>
+            )}
             <button
               onClick={enterStage}
               className="mt-2 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-white/5 text-sm font-medium text-slate-300 hover:bg-white/10 transition-colors"
@@ -810,14 +816,16 @@ export default function App() {
                 {playing ? <Pause className="w-8 h-8" fill="white" /> : <Play className="w-8 h-8 ml-1" fill="white" />}
               </span>
             </button>
-            <div className="w-full max-w-xs">
-              <div className="flex items-center gap-3">
-                <Volume2 className="w-5 h-5 text-slate-500 shrink-0" aria-label="Volume" />
-                <input type="range" min="0" max="1" step="0.01" value={volume}
-                  onChange={(e) => setVolume(parseFloat(e.target.value))}
-                  className="w-full accent-indigo-500" aria-label="Volume" />
+            {VOLUME_CONTROLLABLE && (
+              <div className="w-full max-w-xs">
+                <div className="flex items-center gap-3">
+                  <Volume2 className="w-5 h-5 text-slate-500 shrink-0" aria-label="Volume" />
+                  <input type="range" min="0" max="1" step="0.01" value={volume}
+                    onChange={(e) => setVolume(parseFloat(e.target.value))}
+                    className="w-full accent-indigo-500" aria-label="Volume" />
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Direct key selection — tap any key, no clicking through arrows */}

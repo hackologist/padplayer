@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Play, Pause, Volume2, Coffee, Heart, Lock, Check, Mail, X, Maximize2, Minimize2 } from "lucide-react";
+import { Play, Pause, Coffee, Heart, Lock, Check, Mail, X, Maximize2, Minimize2 } from "lucide-react";
 import { createAudioEngine } from "./audioEngine";
 import { initAnalytics, track } from "./analytics";
 
@@ -17,14 +17,6 @@ const PREFS_KEY = "pp_prefs"; // remembers last key / volume across visits
 
 const KEYS = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 const PREVIEW_SECONDS = 2;
-
-// Can we actually control volume in software? iOS ignores HTMLAudioElement.volume
-// (it returns 1 no matter what you set), so the in-app slider does nothing there
-// — we hide it and let the phone's hardware buttons handle volume. Desktop/Android
-// honor it, so we show it.
-const VOLUME_CONTROLLABLE = (() => {
-  try { const a = new Audio(); a.volume = 0.5; return a.volume === 0.5; } catch { return false; }
-})();
 
 const emptyKeyMap = () => KEYS.reduce((acc, k) => ((acc[k] = ""), acc), {});
 
@@ -49,10 +41,9 @@ const loadPrefs = () => {
     const p = JSON.parse(safeGet(PREFS_KEY) || "{}");
     return {
       key: KEYS.includes(p.key) ? p.key : "C",
-      volume: typeof p.volume === "number" && p.volume >= 0 && p.volume <= 1 ? p.volume : 0.8,
     };
   } catch {
-    return { key: "C", volume: 0.8 };
+    return { key: "C" };
   }
 };
 
@@ -164,7 +155,6 @@ export default function App() {
   const [selectedId, setSelectedId] = useState("signature");
   const [activeKey, setActiveKey] = useState(prefs.key);
   const [playing, setPlaying] = useState(false);
-  const [volume, setVolume] = useState(prefs.volume);
   const [previewing, setPreviewing] = useState(null);
   const [stageMode, setStageMode] = useState(false);
 
@@ -212,12 +202,10 @@ export default function App() {
     return remove;
   }, []);
 
-  useEffect(() => { engine.setVolume(volume); }, [engine, volume]);
-
-  // Remember the worship leader's key + volume for next visit.
+  // Remember the worship leader's last key for next visit.
   useEffect(() => {
-    safeSet(PREFS_KEY, JSON.stringify({ key: activeKey, volume }));
-  }, [activeKey, volume]);
+    safeSet(PREFS_KEY, JSON.stringify({ key: activeKey }));
+  }, [activeKey]);
 
   // Step the active key up/down (keyboard arrows in Stage Mode). Functional
   // update so it's always correct regardless of closure.
@@ -548,14 +536,6 @@ export default function App() {
           </div>
 
           <div className="space-y-4 max-w-sm mx-auto">
-            {VOLUME_CONTROLLABLE && (
-              <div className="flex items-center gap-3">
-                <Volume2 className="w-5 h-5 text-slate-400 shrink-0" aria-label="Volume" />
-                <input type="range" min="0" max="1" step="0.01" value={volume}
-                  onChange={(e) => setVolume(parseFloat(e.target.value))}
-                  className="w-full accent-indigo-500" aria-label="Volume" />
-              </div>
-            )}
             <button
               onClick={enterStage}
               className="mt-2 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full bg-white/5 text-sm font-medium text-slate-300 hover:bg-white/10 transition-colors"
@@ -715,7 +695,7 @@ export default function App() {
                 laptop, plug into your sound system or in-ear monitors, and press play, with no MainStage,
                 Ableton, or downloads needed. Turn on Stage Mode for a big, glanceable key you can
                 read from across the platform, and the screen stays awake while a pad plays so your
-                device never sleeps mid-set. Your key and volume are remembered for next time.
+                device never sleeps mid-set. Your last key is remembered for next time.
               </p>
             </div>
           </div>
@@ -808,24 +788,14 @@ export default function App() {
             <p className="mt-1 text-[11px] uppercase tracking-widest text-slate-500">{playing ? "Playing" : "Paused"}</p>
           </div>
 
-          {/* Play + volume */}
-          <div className="relative shrink-0 flex flex-col items-center gap-5 px-4">
+          {/* Play */}
+          <div className="relative shrink-0 flex flex-col items-center px-4">
             <button onClick={togglePlay} disabled={!hasAudio} className="relative group" aria-label={playing ? "Pause" : "Play"}>
               <span className={`absolute inset-0 rounded-full bg-indigo-500/30 blur-xl transition-all duration-1000 ${playing ? "scale-150 opacity-100 animate-pulse" : "opacity-40"}`} />
               <span className="relative flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-900/50 group-active:scale-95 transition-transform disabled:opacity-40">
                 {playing ? <Pause className="w-8 h-8" fill="white" /> : <Play className="w-8 h-8 ml-1" fill="white" />}
               </span>
             </button>
-            {VOLUME_CONTROLLABLE && (
-              <div className="w-full max-w-xs">
-                <div className="flex items-center gap-3">
-                  <Volume2 className="w-5 h-5 text-slate-500 shrink-0" aria-label="Volume" />
-                  <input type="range" min="0" max="1" step="0.01" value={volume}
-                    onChange={(e) => setVolume(parseFloat(e.target.value))}
-                    className="w-full accent-indigo-500" aria-label="Volume" />
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Direct key selection — tap any key, no clicking through arrows */}

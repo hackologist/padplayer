@@ -60,7 +60,7 @@ function createPlainEngine(opts = {}) {
   let cur = null;        // current plain <audio> element
   let curUrl = "";
   let playing = false;
-  let volume = 0.8;
+  let volume = 1;        // full volume (no in-app volume control; device handles it)
 
   try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch { /* unsupported */ }
 
